@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foto Booth — photo booth di browser, jalan tanpa internet</title>
+<meta name="description" content="Aplikasi photo booth yang jalan di browser. Capture dari webcam, template editor, cetak strip, mode kiosk, galeri tamu via QR. Offline-first: jaringan opsional, bukan syarat.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Foto Booth — photo booth di browser">
+<meta property="og:description" content="Capture, template, cetak, kiosk, galeri QR. Jalan tanpa internet. Beli sekali, bukan langganan.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#fffdf5">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Lewati ke konten</a>
+
+<header class="bar">
+  <div class="wrap bar-in">
+    <a class="logo" href="/">
+      <span class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/>
+          <circle cx="12" cy="13" r="3.4"/>
+        </svg>
+      </span>
+      FOTO&nbsp;BOOTH
+    </a>
+    <nav class="nav" aria-label="Navigasi utama">
+      <a href="#fitur">Fitur</a>
+      <a href="#offline">Offline</a>
+      <a href="#harga">Harga</a>
+      <a href="#tanya">Tanya</a>
+    </nav>
+    <a class="btn btn-pink btn-sm" href="/studio/">Buka Studio</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── Hero ─────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <span class="tag">Beli sekali · bukan langganan</span>
+        <h1>
+          Photo booth<br>
+          di <em>browser</em> lu.
+        </h1>
+        <p class="lede">
+          Capture dari webcam, susun template, cetak strip, jalankan mode kiosk,
+          bagikan galeri lewat QR. <strong>Jalan penuh tanpa internet</strong> —
+          jaringan opsional, bukan syarat.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-pink" href="/studio/">Buka Studio →</a>
+          <a class="btn btn-ghost" href="#fitur">Lihat fitur</a>
+        </div>
+        <ul class="ticks">
+          <li>Offline-first</li>
+          <li>Install sebagai app (PWA)</li>
+          <li>Data lu, di mesin lu</li>
+        </ul>
+      </div>
+
+      <div class="hero-art" aria-hidden="true">
+        <div class="strip">
+          <div class="strip-head">FOTO BOOTH</div>
+          <div class="frame f1"></div>
+          <div class="frame f2"></div>
+          <div class="frame f3"></div>
+          <div class="frame f4"></div>
+          <div class="strip-foot">soyuz.my.id</div>
+        </div>
+        <span class="sticker s1">no wifi? aman</span>
+        <span class="sticker s2">100% di browser</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Marquee ──────────────────────────────────────────── -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span>WEBCAM CAPTURE</span><span>·</span>
+      <span>TEMPLATE EDITOR</span><span>·</span>
+      <span>PRINT STRIP</span><span>·</span>
+      <span>KIOSK MODE</span><span>·</span>
+      <span>GALERI QR</span><span>·</span>
+      <span>OFFLINE-FIRST</span><span>·</span>
+      <span>WEBCAM CAPTURE</span><span>·</span>
+      <span>TEMPLATE EDITOR</span><span>·</span>
+      <span>PRINT STRIP</span><span>·</span>
+      <span>KIOSK MODE</span><span>·</span>
+      <span>GALERI QR</span><span>·</span>
+      <span>OFFLINE-FIRST</span><span>·</span>
+    </div>
+  </div>
+
+  <!-- ── Fitur ────────────────────────────────────────────── -->
+  <section id="fitur" class="sec">
+    <div class="wrap">
+      <h2 class="sec-title">Yang lu dapet</h2>
+      <p class="sec-sub">Satu aplikasi, dari ambil foto sampai tamu download sendiri.</p>
+
+      <div class="cards">
+        <article class="card c-yellow">
+          <span class="card-num">01</span>
+          <h3>Capture</h3>
+          <p>Countdown, multi-shot, review &amp; retake. Webcam langsung, tanpa install driver.</p>
+        </article>
+        <article class="card c-cyan">
+          <span class="card-num">02</span>
+          <h3>Template editor</h3>
+          <p>Susun frame, background, sticker, dan teks. Template murni JSON — gampang di-backup.</p>
+        </article>
+        <article class="card c-pink">
+          <span class="card-num">03</span>
+          <h3>Cetak</h3>
+          <p>Print strip langsung dari browser, atau simpan PNG/JPEG kalau printer lagi ngambek.</p>
+        </article>
+        <article class="card c-lime">
+          <span class="card-num">04</span>
+          <h3>Mode kiosk</h3>
+          <p>Fullscreen, PIN, idle reset, wake lock. Tinggal ditinggal — tamu jalan sendiri.</p>
+        </article>
+        <article class="card c-blue">
+          <span class="card-num">05</span>
+          <h3>Galeri tamu</h3>
+          <p>QR di layar, tamu scan, foto langsung di HP mereka. Bisa dikunci password.</p>
+        </article>
+        <article class="card c-orange">
+          <span class="card-num">06</span>
+          <h3>Data milik lu</h3>
+          <p>Gak ada langganan bulanan, gak ada kredit AI yang dihitung, gak ada watermark paksa.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Offline ──────────────────────────────────────────── -->
+  <section id="offline" class="sec sec-offline">
+    <div class="wrap offline-in">
+      <div>
+        <span class="tag tag-dark">Properti inti</span>
+        <h2 class="sec-title">Internet mati, acara tetap jalan.</h2>
+        <p class="sec-sub">
+          Ini bukan fitur tempelan. Aplikasi dibangun offline-first dari baris pertama:
+          foto disimpan di perangkat, antre di lokal, lalu tersinkron sendiri begitu
+          ada koneksi.
+        </p>
+        <ul class="list">
+          <li><strong>App shell offline</strong> — aplikasi kebuka walau server mati.</li>
+          <li><strong>Penyimpanan lokal</strong> — foto masuk IndexedDB + OPFS, bukan cuma di memori.</li>
+          <li><strong>Antre &amp; sinkron otomatis</strong> — upload nyusul, ada retry, gak ada yang hilang.</li>
+          <li><strong>Indikator online/offline</strong> — lu selalu tau lagi di mode mana.</li>
+          <li><strong>Kiosk full-offline</strong> — venue tanpa wifi? tetap jalan seharian.</li>
+        </ul>
+      </div>
+      <div class="modes" aria-hidden="true">
+        <div class="mode m1"><b>ONLINE</b><span>semua fitur + galeri realtime</span></div>
+        <div class="mode m2"><b>HYBRID</b><span>jalan offline, sinkron pas ada sinyal</span></div>
+        <div class="mode m3"><b>OFFLINE</b><span>capture, template, print — tetap penuh</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Cara kerja ───────────────────────────────────────── -->
+  <section class="sec">
+    <div class="wrap">
+      <h2 class="sec-title">Jalanin-nya gimana</h2>
+      <div class="steps">
+        <div class="step"><span class="step-n">1</span><h3>Buka di browser</h3><p>Tidak perlu install apa pun. Bisa di-“Install app” biar kayak aplikasi biasa.</p></div>
+        <div class="step"><span class="step-n">2</span><h3>Pilih template</h3><p>Pakai bawaan, atau bikin sendiri di editor. Cetak &amp; atur sesuka lu.</p></div>
+        <div class="step"><span class="step-n">3</span><h3>Tinggal tamu</h3><p>Mode kiosk nyala. Tamu foto sendiri, hasilnya ke galeri lewat QR.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Harga ────────────────────────────────────────────── -->
+  <section id="harga" class="sec sec-price">
+    <div class="wrap">
+      <h2 class="sec-title">Harga</h2>
+      <p class="sec-sub">Bayar sekali. Pakai selamanya. Gak ada tagihan tiap bulan.</p>
+
+      <div class="plans">
+        <article class="plan plan-main">
+          <span class="plan-tag">Sekali bayar</span>
+          <h3>Lisensi penuh</h3>
+          <p class="price">Rp—<small> / sekali</small></p>
+          <ul class="list list-tight">
+            <li>Semua fitur capture, template, print, kiosk</li>
+            <li>Galeri tamu + QR + password</li>
+            <li>Offline penuh, tanpa batas sesi</li>
+            <li>Update versi mayor</li>
+          </ul>
+          <a class="btn btn-pink btn-full" href="/studio/">Coba dulu</a>
+        </article>
+
+        <article class="plan">
+          <span class="plan-tag">Nanti</span>
+          <h3>White-label</h3>
+          <p class="price">Custom<small></small></p>
+          <ul class="list list-tight">
+            <li>Domain &amp; branding sendiri</li>
+            <li>Template khusus vendor</li>
+            <li>Bantuan setup venue</li>
+          </ul>
+          <a class="btn btn-ghost btn-full" href="#tanya">Tanya-tanya</a>
+        </article>
+      </div>
+      <p class="fine">Harga final belum ditetapkan — masih tahap pembangunan. Yang udah jadi: aplikasinya.</p>
+    </div>
+  </section>
+
+  <!-- ── FAQ ──────────────────────────────────────────────── -->
+  <section id="tanya" class="sec">
+    <div class="wrap">
+      <h2 class="sec-title">Pertanyaan yang sering muncul</h2>
+      <div class="faq">
+        <details><summary>Butuh internet gak?</summary><p>Tidak. Aplikasi jalan penuh offline — capture, template, cetak, kiosk. Internet cuma dipakai buat galeri tamu dan sinkronisasi, dan itu opsional.</p></details>
+        <details><summary>Fotonya disimpan di mana?</summary><p>Di perangkat lu sendiri dulu. Baru diunggah kalau lu mau, dan bisa diatur supaya otomatis terhapus setelah 30 hari.</p></details>
+        <details><summary>Webcam laptop bisa?</summary><p>Bisa. Kamera webcam standar langsung jalan tanpa driver. Kamera DSLR lewat USB masuk rencana berikutnya.</p></details>
+        <details><summary>Langganan bulanan?</summary><p>Enggak. Beli sekali, pakai selamanya. Gak ada kredit AI yang dihitung, gak ada watermark paksa.</p></details>
+        <details><summary>Printer apa yang didukung?</summary><p>Lewat dialog cetak browser, jadi printer yang sudah terpasang di sistem bisa dipakai. Dukungan printer USB khusus menyusul.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ──────────────────────────────────────────────── -->
+  <section class="sec sec-cta">
+    <div class="wrap cta-box">
+      <h2>Siap dipakai buat acara lu.</h2>
+      <p>Buka studionya, nyalakan kiosk, tinggal tamu.</p>
+      <a class="btn btn-dark" href="/studio/">Buka Studio →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>© <span id="y">2026</span> Foto Booth</span>
+    <nav aria-label="Footer">
+      <a href="/studio/">Studio</a>
+      <a href="/health">Status</a>
+      <a href="/version">Versi</a>
+    </nav>
+  </div>
+</footer>
+
+<script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "Foto Booth Studio",
+    "tagline": "Capture, template, cetak, kiosk — jalan tanpa internet."
+  },
+  "status": {
+    "title": "Status sistem",
+    "subtitle": "Aplikasi ini dibangun offline-first. Panel ini menunjukkan sumber dayanya.",
+    "connection": "Koneksi",
+    "connectionOnline": "Online",
+    "connectionOffline": "Offline",
+    "mode": "Mode operasi",
+    "modeOnline": "Online — semua fitur, galeri realtime",
+    "modeHybrid": "Hybrid — jalan offline, sinkron nanti",
+    "modeOffline": "Offline penuh — capture, template, cetak tetap jalan",
+    "serviceWorker": "App shell",
+    "serviceWorkerActive": "Tersimpan di perangkat",
+    "serviceWorkerInactive": "Belum aktif",
+    "storage": "Penyimpanan lokal",
+    "storagePersistent": "Permanen",
+    "storageBestEffort": "Sementara",
+    "storageUsage": "Terpakai {{used}} dari {{quota}}",
+    "storageUnavailable": "Tidak tersedia di browser ini",
+    "version": "Versi",
+    "checking": "Memeriksa…"
+  },
+  "install": {
+    "button": "Install sebagai app",
+    "hint": "Pasang di perangkat biar kebuka kayak aplikasi biasa, tanpa browser."
+  },
+  "session": {
+    "title": "Sesi foto",
+    "body": "Mesin capture masuk Fase 1: countdown, multi-shot, review & retake. Fondasi offline-nya sudah siap di sini.",
+    "cta": "Segera"
+  },
+  "footer": {
+    "note": "Beli sekali, bukan langganan.",
+    "landing": "Beranda"
+  },
+  "locale": {
+    "label": "Bahasa"
+  }
+}

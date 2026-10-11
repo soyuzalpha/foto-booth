@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "Foto Booth Studio",
+    "tagline": "Capture, templates, print, kiosk — runs without internet."
+  },
+  "status": {
+    "title": "System status",
+    "subtitle": "This app is built offline-first. This panel shows the resources it relies on.",
+    "connection": "Connection",
+    "connectionOnline": "Online",
+    "connectionOffline": "Offline",
+    "mode": "Operating mode",
+    "modeOnline": "Online — all features, live gallery",
+    "modeHybrid": "Hybrid — works offline, syncs later",
+    "modeOffline": "Fully offline — capture, templates, print still work",
+    "serviceWorker": "App shell",
+    "serviceWorkerActive": "Cached on this device",
+    "serviceWorkerInactive": "Not active yet",
+    "storage": "Local storage",
+    "storagePersistent": "Persistent",
+    "storageBestEffort": "Best effort",
+    "storageUsage": "{{used}} used of {{quota}}",
+    "storageUnavailable": "Not available in this browser",
+    "version": "Version",
+    "checking": "Checking…"
+  },
+  "install": {
+    "button": "Install as app",
+    "hint": "Add it to your device so it opens like a normal app, without the browser."
+  },
+  "session": {
+    "title": "Photo session",
+    "body": "The capture engine lands in Phase 1: countdown, multi-shot, review & retake. The offline foundation is already here.",
+    "cta": "Coming soon"
+  },
+  "footer": {
+    "note": "Buy once, not a subscription.",
+    "landing": "Home"
+  },
+  "locale": {
+    "label": "Language"
+  }
+}

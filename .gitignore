@@ -9,6 +9,13 @@ build/
 out/
 *.tsbuildinfo
 
+# vite
+.vite/
+apps/studio/dist/
+
+# runtime data (lives on the host, mounted into the container)
+storage/
+
 # env & secrets
 .env
 .env.*

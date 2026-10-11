@@ -1,0 +1,107 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    # Skema mengikuti aseppp-web: build image, jalankan container uji di port
+    # terpisah, health check, baru ganti container produksi.
+    #
+    # Storage (template, konten, galeri) hidup di host supaya tidak ikut mati
+    # bersama image. Di dalam repo (~/app/foto-booth) dan gitignored, karena
+    # user runner tidak punya sudo dan direktori buatan container akan
+    # dimiliki root.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Prepare storage
+        run: |
+          STORAGE_DIR="$HOME/app/foto-booth/storage"
+          echo "STORAGE_DIR=$STORAGE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$STORAGE_DIR/templates" "$STORAGE_DIR/content" "$STORAGE_DIR/gallery"
+
+      - name: Build Docker image
+        run: docker build -t foto-booth:${{ github.sha }} .
+
+      - name: Start test container
+        run: |
+          docker rm -f foto-booth-test 2>/dev/null || true
+
+          docker run -d \
+            --name foto-booth-test \
+            -v "$STORAGE_DIR:/app/storage" \
+            -p 127.0.0.1:5150:5050 \
+            foto-booth:${{ github.sha }}
+
+      # /health membaca state runtime, jadi ini juga membuktikan prosesnya
+      # benar-benar hidup — bukan cuma port-nya terbuka.
+      - name: Test container health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5150/health > /dev/null; then
+              echo "Test container is healthy"
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Test container failed"
+          docker logs foto-booth-test --tail 100
+          exit 1
+
+      - name: Deploy production
+        run: |
+          docker rm -f foto-booth 2>/dev/null || true
+
+          docker run -d \
+            --name foto-booth \
+            --restart unless-stopped \
+            -v "$STORAGE_DIR:/app/storage" \
+            -p 127.0.0.1:5050:5050 \
+            foto-booth:${{ github.sha }}
+
+      - name: Production health check
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5050/health > /dev/null; then
+              echo "Production deployment successful"
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Production deployment failed"
+          docker logs foto-booth --tail 100
+          exit 1
+
+      - name: Cleanup test container
+        if: always()
+        run: docker rm -f foto-booth-test 2>/dev/null || true

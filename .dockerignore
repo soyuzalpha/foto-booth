@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.env*
+storage
+docs
+*.log
+*.tsbuildinfo
+.vite
+**/.vite
+coverage
+Dockerfile
+.dockerignore
+docker-compose.yml
