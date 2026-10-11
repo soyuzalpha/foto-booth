@@ -1,0 +1,388 @@
+# Fase Pengembangan — Foto Booth
+
+Dokumen ini **satu-satunya sumber kebenaran** untuk progres fase. Update di commit yang sama dengan pekerjaan fasenya.
+
+Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (kriteria terima MVP) & §D (checklist QA).
+
+---
+
+## Protokol gate (aturan main)
+
+1. **Satu fase = satu blok kerja.** Jangan campur dua fase dalam satu commit.
+2. **Selesai ngerjain → validasi dulu, baru centang.** Centang `[ ]` → `[x]` **hanya** setelah perintah di bagian *Validasi* fase itu dijalankan dan hasilnya sesuai. Bukan setelah kodenya "kelihatan jadi".
+3. **Mau pindah fase → cek gate fase sebelumnya.** Isi bagian *Gate keluar* fase lama (semua task `[x]` + validasi lolos + bukti tercatat). Kalau ada yang gagal → perbaiki di fase itu, **jangan lanjut**.
+4. **Bukti itu output nyata, bukan deskripsi.** Run CI hijau (nomor run), output perintah, angka DOM, status container. Kalau tidak ada buktinya, berarti belum selesai.
+5. **Jangan hapus kriteria yang gagal.** Kalau sesuatu ditunda, tulis alasannya di baris itu (`→ ditunda: <alasan>`) dan jangan centang.
+
+**Legenda:** `[ ]` belum · `[x]` selesai & tervalidasi · `[~]` dikerjakan, belum lulus validasi · `[!]` blocked (tulis blocker-nya)
+
+**Definisi "selesai" berlaku untuk semua fase:**
+
+- [ ] Kode ada di `dev`, sudah ff-merge ke `main`, sudah push
+- [ ] `pnpm lint` · `pnpm -r typecheck` · `pnpm -r build` hijau semua
+- [ ] CI run untuk commit itu **hijau** (semua step success)
+- [ ] Container produksi `foto-booth` healthy di `127.0.0.1:5050` dengan tag SHA commit baru
+- [ ] Bukti ditulis di bagian *Bukti* fase tersebut
+
+---
+
+## Peta fase
+
+**MVP = Fase 0–5.** Fase 6–12 = setelah MVP.
+
+| Fase | Isi | Ukuran | Status |
+|---|---|---|---|
+| **0** | Scaffold monorepo + offline shell + CI deploy | L | `[x]` **selesai** |
+| **1** | Capture engine (webcam, countdown, multi-shot, review) | L | `[ ]` |
+| **2** | Template engine + editor Konva + render strip | L | `[ ]` |
+| **3** | Print layout + print browser + download | M | `[ ]` |
+| **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
+| **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[ ]` |
+| 6 | Green screen + adjustments + face enhance | L | `[ ]` |
+| 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
+| 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
+| 9 | Leads + analytics + branding | M | `[ ]` |
+| 10 | Lisensi + payment (QRIS) | M | `[ ]` |
+| 11 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
+| 12 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
+
+**Urutan kritis MVP:** `0 → 1 → 2 → 3 → 4 → 5`. Offline **bukan fase terpisah** — dibangun dari Fase 0 dan divalidasi ulang di tiap fase.
+
+**Ukuran:** S = sehari · M = beberapa hari · L = blok kerja besar.
+
+---
+
+## Fase 0 — Fondasi, offline shell, CI deploy
+
+**Status:** `[x]` selesai & tervalidasi (2026-10-11)
+**Gate masuk:** —
+**Tujuan:** kerangka monorepo yang bisa dibuild, app yang jalan tanpa internet, dan jalur deploy otomatis ke rumah.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Root | `package.json` · `pnpm-workspace.yaml` · `tsconfig.base.json` · `eslint.config.mjs` · `.nvmrc` (24) |
+| Shared | `packages/shared/src/{constants,schemas,index}.ts` (Zod + tipe) |
+| API | `apps/api/src/{app,index,paths}.ts` + `routes/{health,content,gallery}.ts` (Fastify, PORT 5050) |
+| Studio | `apps/studio/` — Vite + React SPA, `vite.config.ts` (vite-plugin-pwa), `src/lib/{i18n,api,useOnlineStatus,useServiceWorkerStatus,useStorageStatus,useInstallPrompt}.ts`, `src/locales/{id,en}.json` |
+| Landing | `apps/api/static/landing/{index.html,styles.css}` (neo-brutalism) |
+| Deploy | `Dockerfile` · `.github/workflows/deploy.yml` |
+
+**Task**
+
+- [x] pnpm workspace + 3 unit (`shared`, `api`, `studio`), tanpa Turborepo
+- [x] `shared` = satu sumber Zod schema + tipe FE↔BE
+- [x] Studio SPA + `vite-plugin-pwa` (service worker, manifest, ikon PNG)
+- [x] API Fastify: `/health`, `/v1/health`, `/v1/content/*`, galeri `/a/:hash`
+- [x] Landing page neo-brutalism
+- [x] Dockerfile (deps → builder → runner), image jalan tanpa sudo
+- [x] CI: lint → typecheck → build → image → container uji (5150) → health → swap produksi (5050) → health
+- [x] Auto-prune image lama (scoped `foto-booth:*`, simpan image aktif)
+- [x] Runner self-hosted kedua untuk repo ini (`actions-runner-fotobooth`, user unit + `runsvc.sh`)
+- [x] `workflow_dispatch` (redeploy tanpa commit)
+- [x] Indikator online/offline + status service worker + persist storage (skeleton)
+
+**Kriteria terima (FEATURE-MATRIX):** baris 25 (app shell offline), 116 (service worker Fase 0)
+
+**Validasi**
+
+```bash
+cd ~/app/foto-booth
+pnpm install --frozen-lockfile && pnpm lint && pnpm -r typecheck && pnpm -r build
+
+# offline shell: app harus tetap kebuka dengan network dimatikan
+node ~/.hermes/profiles/vesta/cache/scratch/fb-offline-test.mjs
+
+# container produksi = image commit terbaru
+docker ps --filter name=foto-booth --format '{{.Image}} {{.Status}}'
+for r in / /studio/ /health /v1/health /v1/content/starters; do
+  printf '%s %s\n' "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5050$r)" "$r"
+done
+```
+
+**Gate keluar:** CI hijau (run #7 / `38179994051`, 15/15 step) · offline shell terbukti jalan · container healthy · semua route 200.
+
+**Bukti**
+
+- CI run **#7** `38179994051` — **success**, semua step termasuk `Prune old images`
+- Container `foto-booth` healthy, image `foto-booth:d92442c0d74b524a4babeec078a2508fd4b79ab0` (tag = SHA commit)
+- Route 200: `/`, `/studio/`, `/health`, `/v1/health`, `/v1/content/starters`, `/studio/manifest.webmanifest`
+- Offline test lolos: app shell kebuka dengan jaringan mati, storage persist = granted
+- Disk host bersih: image reclaimable 88KB, dangling 0
+
+**Sisa (dipindah, bukan blocker Fase 0)**
+
+- `[ ]` **Hostname publik `foto.soyuz.my.id`** — butuh sudo: `sudo ~/script/add-fotobooth-tunnel.sh`. Dibutuhkan Fase 5 (galeri harus bisa diakses HP tamu). Dijadwalkan masuk Fase 5.
+- `[ ]` Skeleton i18n/status/install-prompt masih minimal — diselesaikan & divalidasi di Fase 1.
+
+---
+
+## Fase 1 — Capture engine
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 0 gate keluar terpenuhi.
+**Tujuan:** bisa foto dari webcam — countdown, multi-shot, review/retake — **termasuk saat offline**.
+
+**Deliverable:** `apps/studio/src/lib/capture/*` (`CaptureSession` state machine, event bus), `apps/studio/src/lib/transports/*` (`WebcamTransport`, `FakeTransport`), UI capture + review.
+
+**Task**
+
+- [ ] State machine eksplisit `idle → armed → countdown → capturing → review → processing → composed`
+- [ ] `CaptureSession`: multi-shot 1..N, countdown per frame (on/off, durasi configurable), delay antar shot
+- [ ] `Frame { id, blob, exif, ts, shotIndex }` + event bus (`frame:captured`)
+- [ ] `CameraTransport` interface + `WebcamTransport` (getUserMedia) + `FakeTransport` (untuk tes/CI)
+- [ ] Pilih kamera dari `enumerateDevices`
+- [ ] Mirror + aspect ratio 1:1 / 16:9 / 3:2 (preview & hasil ikut berubah)
+- [ ] Review + retake **per frame** (tanpa ulang semua)
+- [ ] Frame disimpan ke IndexedDB saat itu juga (tahan refresh)
+- [ ] Indikator online/offline akurat + PWA installable + i18n id/en lengkap
+- [ ] `prefers-reduced-motion` untuk animasi countdown
+
+**Kriteria terima (FEATURE-MATRIX):** 1–6 (capture) · 25–26 (offline capture) · 28 (indikator) · 31 (i18n) · 123 (PWA) · 143–144 (transport)
+
+**Validasi**
+
+```bash
+cd ~/app/foto-booth
+pnpm lint && pnpm -r typecheck && pnpm -r build
+# unit test state machine + FakeTransport (tanpa kamera)
+pnpm --filter @foto-booth/studio test
+```
+
+- [ ] Preview tampil < 2 s, resolusi ≥ 1280×720 (diukur dari `videoWidth/videoHeight`, bukan dari mata)
+- [ ] State machine: tiap transisi diuji, termasuk retake 1 frame
+- [ ] **Mode pesawat dari awal → capture tetap jalan, frame tersimpan lokal**
+- [ ] Refresh di tengah sesi → frame tidak hilang (baca ulang IndexedDB)
+- [ ] Ukur DOM: ganti aspect ratio → `getBoundingClientRect()` preview berubah sesuai rasio
+- [ ] CI run hijau + container healthy dengan tag SHA baru
+
+**Gate keluar:** semua task `[x]` · unit test lulus · capture offline terbukti · bukti ditulis.
+**Bukti:** —
+
+---
+
+## Fase 2 — Template engine + editor
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 1 gate keluar terpenuhi (frame bisa diambil & disimpan).
+**Tujuan:** bikin template sendiri dan render strip/kolase jadi PNG ≥ 300 dpi.
+
+**Deliverable:** `apps/studio/src/lib/template/*` (model JSON + render Konva), editor drag-drop, penyimpanan template di IndexedDB.
+
+**Task**
+
+- [ ] Model `Template` JSON: `size`, `background`, `frames[]`, `textElements[]`, `stickers[]`
+- [ ] Zod schema template di `packages/shared` (validasi + tipe)
+- [ ] Render template + frame → canvas (Konva)
+- [ ] Editor drag-drop: geser / resize / rotate / undo
+- [ ] Token teks `{event}` `{date}` `{time}` `{custom}` disubstitusi saat compose
+- [ ] Simpan / muat / hapus template (IndexedDB), muncul di daftar
+- [ ] Export PNG (dan JPEG) ≥ 300 dpi, nama file rapi
+- [ ] Render di Worker/OffscreenCanvas biar UI tidak nge-freeze
+
+**Kriteria terima (FEATURE-MATRIX):** 7–11 (template) · 85–89
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm --filter @foto-booth/studio test
+```
+
+- [ ] Round-trip JSON: simpan → muat ulang → **byte-identik**
+- [ ] Template invalid ditolak Zod dengan pesan jelas (bukan crash)
+- [ ] Ukur canvas hasil export: `2×6` @300 dpi = **600×1800 px**, `4×6` = **1200×1800 px**
+- [ ] Token ter-substitusi: cek teks pada canvas/bitmap, bukan dari state
+- [ ] Editor: geser/rotate lewat Playwright, lalu baca koordinat elemen
+- [ ] Reload halaman → template masih ada
+- [ ] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · dimensi export terukur sesuai · template persisten · bukti ditulis.
+**Bukti:** —
+
+---
+
+## Fase 3 — Print & export
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 2 gate keluar terpenuhi (hasil compose bisa dirender).
+**Tujuan:** hasil bisa jadi foto fisik dan file.
+
+**Deliverable:** `apps/studio/src/lib/print/*` (layout preset, DPI-aware), iframe print, tombol download.
+
+**Task**
+
+- [ ] Preset kertas `2×6 strip` + `4×6` dengan margin/bleed benar
+- [ ] `renderPrintLayout(template, frames) → HTMLCanvasElement` (300 dpi)
+- [ ] Print via iframe (`window.print()`), ukuran benar
+- [ ] Download PNG/JPEG, nama file rapi
+- [ ] Cache aset konten (template/frame/sticker/font) untuk offline
+- [ ] Preview print sebelum keluar dialog
+
+**Kriteria terima (FEATURE-MATRIX):** 12–14 (print) · 94–96 · 121 (cache konten offline)
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+```
+
+- [ ] Ukur canvas print: `2×6` → 600×1800 px, `4×6` → 1200×1800 px (300 dpi)
+- [ ] Bandingkan preview vs file hasil: tidak ada elemen terpotong di tepi (probe pixel band)
+- [ ] Nama file terunduh sesuai pola (tanggal + event)
+- [ ] **Offline: konten (template/frame/sticker) tetap tampil setelah sync pertama**
+- [ ] Print dialog keluar dengan ukuran benar (diuji di Chromium headless + manual)
+- [ ] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · dimensi print terukur · konten offline tersedia · bukti ditulis.
+**Bukti:** —
+
+---
+
+## Fase 4 — Kiosk mode
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 3 gate keluar terpenuhi (alur foto → cetak utuh).
+**Tujuan:** bisa ditinggal tanpa operator.
+
+**Deliverable:** `apps/studio/src/lib/kiosk/*` + layar kiosk (fullscreen, PIN, idle reset, wake lock).
+
+**Task**
+
+- [ ] Fullscreen API + sembunyikan navigasi
+- [ ] Idle timeout → auto reset ke layar awal (configurable, mis. 60 s)
+- [ ] PIN lock untuk keluar (PIN di-hash lokal, bukan plaintext)
+- [ ] Tap to start + wake lock (layar tidak tidur)
+- [ ] `preventDefault` gesture yang tidak diinginkan (zoom, context menu, swipe-back)
+- [ ] **Kiosk full-offline**: satu device tanpa koneksi → sesi penuh + print tetap utuh
+- [ ] Toggle tombol gallery/print/share (disiapkan, UI lengkap di Fase 9)
+
+**Kriteria terima (FEATURE-MATRIX):** 15–18 (kiosk) · 100–103 · 122 (kiosk full-offline)
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm --filter @foto-booth/studio test
+```
+
+- [ ] Idle timer diuji dengan **jam palsu** (bukan tunggu 60 s asli): diam X detik → reset
+- [ ] PIN salah → tidak keluar; PIN benar → keluar (dan PIN tidak tersimpan plaintext)
+- [ ] `document.fullscreenElement` terisi saat mode kiosk
+- [ ] Wake lock aktif (spy `navigator.wakeLock.request`)
+- [ ] **Kiosk jalan 1 jam tanpa koneksi → tanpa error, tanpa data hilang** (checklist QA §D)
+- [ ] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · idle & PIN terbukti lewat tes · kiosk offline utuh · bukti ditulis.
+**Bukti:** —
+
+---
+
+## Fase 5 — Galeri, upload, QR, TTL, auth
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 4 gate keluar terpenuhi (kiosk utuh).
+**Tujuan:** tamu bisa ambil fotonya lewat QR. **Ini fase penutup MVP.**
+
+**Deliverable:** `apps/api/src/routes/*` (event, gallery, upload-url, foto, album publik, TTL), `apps/studio/src/lib/upload/*` (queue + retry + auto-sync), halaman `/a/:hash` + OG image + zip, auth OTP, entitlement.
+
+**Task**
+
+- [ ] `POST /v1/events` · `POST /v1/galleries` · `GET /v1/galleries/:id`
+- [ ] `POST /v1/galleries/:id/photos/upload-url` → **presigned S3**, upload langsung (tidak lewat API)
+- [ ] `POST /v1/galleries/:id/photos` → daftarkan metadata setelah upload
+- [ ] Antrian upload persisten (IndexedDB) + status `local-only → queued → uploading → uploaded → failed` + retry
+- [ ] **Auto-sync** saat online kembali (Background Sync, fallback polling `navigator.onLine`)
+- [ ] Halaman tamu `/a/:hash` (HTML + meta OG) + `/a/:hash/og.png` + `/a/:hash/zip`
+- [ ] Password galeri opsional → tanpa password benar = 401
+- [ ] QR code → langsung ke album
+- [ ] TTL 30 hari + job cleanup harian (hapus row + objek S3)
+- [ ] Auth email OTP → JWT · entitlement/lisensi dasar
+- [ ] **Tunnel publik `foto.soyuz.my.id`** (`sudo ~/script/add-fotobooth-tunnel.sh`) — tamu harus bisa buka dari HP
+- [ ] Foto disimpan lokal dulu (IndexedDB + OPFS)
+
+**Kriteria terima (FEATURE-MATRIX):** 19–24 (galeri) · 27 (queue+auto-sync) · 30 (kiosk full-offline) · 32–33 (auth, lisensi) · 106–108, 118–120, 136–137
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm --filter @foto-booth/api test
+
+# alur tamu end-to-end (script, bukan curl manual)
+node ~/.hermes/profiles/vesta/cache/scratch/fb-gallery-e2e.mjs
+
+# tunnel publik
+curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
+```
+
+- [ ] **Tutup tab saat offline → buka lagi → antrian masih ada** (persisten)
+- [ ] **Online kembali → upload jalan otomatis, tanpa aksi user** (bukti: foto muncul di `/a/:hash`)
+- [ ] QR discan dari HP lain → album kebuka, download jalan
+- [ ] Galeri berpassword → tanpa password ditolak (401)
+- [ ] Foto > 30 hari → terhapus dari DB **dan** S3
+- [ ] Upload tidak lewat API (bukti: `upload-url` presigned + PUT langsung ke S3)
+- [ ] OTP: kode → JWT; entitlement bisa divalidasi
+- [ ] CI hijau + container healthy + hostname publik 200
+
+**Gate keluar:** semua task `[x]` · checklist QA §D **MVP penuh** lulus · bukti ditulis.
+**Bukti:** —
+
+**✅ MVP SELESAI kalau Fase 0–5 semua `[x]`.**
+
+---
+
+## Checklist QA MVP (dari `FEATURE-MATRIX.md` §D)
+
+Dijalankan penuh di **gate keluar Fase 5** sebelum MVP dianggap selesai.
+
+- [ ] Capture jalan di Chrome + Firefox + Safari (iOS)
+- [ ] **Mode pesawat dari awal → app tetap kebuka & sesi foto penuh jalan (offline penuh)**
+- [ ] **Kiosk jalan 1 jam tanpa koneksi → tanpa error, tanpa data hilang**
+- [ ] **Online kembali → antrian upload jalan otomatis, tanpa aksi user**
+- [ ] **Tutup tab saat offline → buka lagi → antrian masih ada (persisten)**
+- [ ] Mati internet → capture tetap jalan, upload nunggu
+- [ ] Indikator offline/online muncul & akurat di UI
+- [ ] Konten (template/frame/sticker/font) tetap tampil setelah sync pertama, tanpa jaringan
+- [ ] Hasil strip 300 dpi, cetak di 4×6 tidak terpotong
+- [ ] Kiosk: diam 60 s → reset; PIN salah → tidak keluar
+- [ ] QR discan dari HP lain → album kebuka, download jalan
+- [ ] Galeri berpassword → tanpa password ditolak
+- [ ] Foto > 30 hari → terhapus dari DB + S3
+- [ ] Ganti bahasa id↔en tanpa reload
+- [ ] Refresh tengah sesi → state tidak hilang (IndexedDB)
+- [ ] 20 sesi berturut-turut → tidak ada memory leak
+
+---
+
+## Fase 6–12 (post-MVP) — ringkas
+
+Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task & validasi tiap fase diisi saat fase itu dimulai — jangan disiapkan terlalu awal.
+
+- **Fase 6** — Green screen (MediaPipe) · adjustments · face enhance (GFPGAN) · rotasi/quality/shutter · storage location picker · Sentry
+- **Fase 7** — Video + slow-mo (WebCodecs + RIFE) · audio · boomerang/slideshow
+- **Fase 8** — AI style/backdrop/upscale/enhance/remix (Gemini BYOK, diproxy lewat `/v1/ai/*`)
+- **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue
+- **Fase 10** — Lisensi + payment QRIS (Midtrans/Xendit) + webhook → aktivasi
+- **Fase 11** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
+- **Fase 12** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring
+
+---
+
+## Cek status
+
+```bash
+node docs/phases-status.mjs          # laporan status tiap fase + cek urutan
+node docs/phases-status.mjs --quiet  # hanya exit code (0 = urutan valid, 1 = ada yang salah)
+```
+
+Script ini menolak fase yang dicentang padahal fase sebelumnya belum selesai — aturan gate-nya jadi mekanis, bukan mengandalkan ingatan.
+
+## Cara update dokumen ini
+
+1. Kerjakan satu fase.
+2. Jalankan perintah di bagian **Validasi** fase itu. Kalau ada yang gagal → `[~]`, perbaiki, ulangi.
+3. Semua lulus → ubah status fase jadi `[x]`, centang task-nya, isi **Bukti** (run CI, output, angka).
+4. Commit bareng pekerjaan fasenya: `docs: fase N selesai — <ringkas bukti>`.
+5. Baru mulai fase berikutnya, dan **cek gate keluar fase sebelumnya** dulu.

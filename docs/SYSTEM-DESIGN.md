@@ -290,6 +290,8 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 **MVP yang bisa dipakai orang = Fase 0–5** (Fase 0 sudah termasuk offline shell). Fase 6–8 yang bikin "wah".
 
 > Rincian fitur per status (MVP / Post / Skip) + kriteria terima + checklist QA ada di **`FEATURE-MATRIX.md`**. Fase di tabel bawah merujuk ke sana.
+>
+> **Cara kerja per fase (checklist, perintah validasi, gate keluar, bukti) ada di `PHASES.md`.** Aturannya: selesai ngerjain → validasi dulu → baru centang; mau pindah fase → cek gate fase sebelumnya.
 
 ---
 

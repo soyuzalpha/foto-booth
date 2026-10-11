@@ -61,6 +61,7 @@ disimpan di `$HOME/app/foto-booth/storage` di host dan di-mount ke
 | `docs/RESEARCH.md` | Hasil riset: produk acuan, peta surface, stack, inventaris fitur (217 key i18n), library konten, model bisnis |
 | `docs/SYSTEM-DESIGN.md` | Arsitektur, struktur repo, modul inti, offline-first, API, data model, kiosk, i18n, fase pengerjaan |
 | `docs/FEATURE-MATRIX.md` | Matriks fitur: MVP vs Post vs Skip + kriteria terima + checklist QA |
+| `docs/PHASES.md` | **Roadmap pengerjaan per fase + protokol gate**: checklist task, perintah validasi, gate keluar, bukti |
 | `docs/architecture.html` | Diagram arsitektur (SVG, standalone) |
 | `docs/architecture.png` | Diagram arsitektur (PNG) |
 
