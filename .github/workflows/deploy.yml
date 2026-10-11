@@ -118,3 +118,37 @@ jobs:
       - name: Cleanup test container
         if: always()
         run: docker rm -f foto-booth-test 2>/dev/null || true
+
+      # Tiap deploy menambah ~470MB image baru. Bersihkan sendiri di sini biar
+      # tidak perlu prune manual.
+      #
+      # Sengaja hanya menyentuh tag foto-booth:* — daemon Docker ini dipakai
+      # bersama repo lain di host yang sama (aseppp-web, clipper, timer), jadi
+      # `docker system prune -a` akan ikut menghapus image mereka.
+      - name: Prune old images
+        if: always()
+        run: |
+          # Image yang sedang dipakai container produksi tidak boleh dihapus:
+          # `--restart unless-stopped` akan gagal menghidupkannya lagi.
+          # --no-trunc supaya ID-nya sebanding dengan {{.Image}} dari inspect
+          # (default-nya ID pendek, 12 karakter, jadi tidak akan pernah cocok).
+          KEEP="$(docker inspect foto-booth --format '{{.Image}}' 2>/dev/null || true)"
+          echo "Image in use: ${KEEP:-<none>}"
+
+          docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+            | awk '$1 ~ /^foto-booth:/ {print $1, $2}' \
+            | while read -r tag id; do
+                if [ -n "$KEEP" ] && [ "$id" = "$KEEP" ]; then
+                  echo "  keep   $tag"
+                  continue
+                fi
+                echo "  remove $tag"
+                docker rmi "$tag" > /dev/null 2>&1 || true
+              done
+
+          # Layer yatim sisa untag di atas.
+          docker image prune -f
+
+          # Cache build lebih tua dari seminggu: build berikutnya tetap cepat,
+          # tapi tidak tumbuh tanpa batas.
+          docker builder prune -f --filter until=168h
