@@ -35,32 +35,47 @@ Prinsip: **client-first** (capture, edit, render, AI lokal semua di browser) + b
 
 ---
 
-## 2. Monorepo (pnpm workspaces + Turborepo)
+## 2. Struktur repo (monorepo ramping — pnpm workspace, tanpa Turborepo)
+
+**Hari-1: 3 unit. Bukan 4 app + 8 package.**
 
 ```
-photobooth/
+foto-booth/
 ├─ apps/
-│  ├─ web/           # marketing (Next.js 15, App Router, i18n, SEO)
-│  ├─ studio/        # APLIKASI UTAMA (Vite + React 19 + TS)
-│  ├─ gallery/       # galeri tamu (Next.js, /album/:hash, OG image)
-│  └─ api/           # Fastify + TS
-├─ packages/
-│  ├─ core/          # capture engine, template engine, layout, filter pipeline
-│  ├─ transports/    # webcam · webusb-ptp · ptpip · fake (buat test)
-│  ├─ ai/            # onnx runtime wrapper + gemini BYOK client + model manifest
-│  ├─ print/         # layout → canvas → print (browser / native)
-│  ├─ db/            # schema Drizzle + migrasi + seed konten
-│  ├─ ui/            # komponen bersama (design system)
-│  ├─ i18n/          # locale JSON + helper
-│  └─ shared/        # tipe, zod schema, konstanta (dipakai FE + BE)
-└─ tooling/          # eslint, tsconfig, prettier preset
+│  ├─ studio/        # APLIKASI UTAMA — Vite + React 19 + TS (SPA, offline-first)
+│  └─ api/           # Fastify + TS (backend tipis)
+└─ packages/
+   └─ shared/        # Zod schema + tipe + konstanta (satu sumber FE↔BE)
 ```
 
-Aturan: `packages/*` **tidak boleh** import dari `apps/*`. `shared` = satu-satunya sumber tipe untuk FE↔BE.
+- **pnpm workspace** (`pnpm-workspace.yaml`) → wajib. Ini satu-satunya alasan kuat monorepo: `shared` di-import studio **dan** api, jadi tipe FE↔BE tidak drift.
+- **Turborepo: belum.** `pnpm -r build` sudah build urut topologis (shared → studio/api). Turbo cuma menambah *caching*; untuk 3 unit nggak ada yang di-cache berarti. Tambah nanti, bukan sekarang.
+- Aturan: `packages/*` **tidak boleh** import dari `apps/*`. `shared` = satu-satunya sumber tipe untuk FE↔BE.
+
+### Kenapa cuma begini
+
+Yang **beneran memaksa** struktur pisah cuma dua:
+1. Studio app harus **SPA + offline** → tidak bisa jadi route Next.js, jadi target build wajib terpisah dari API.
+2. **Zod schema + tipe dipakai bareng** studio ↔ API → tanpa workspace, gampang drift.
+
+Sisanya aspirasional. Jangan disiapkan sebelum ada kebutuhan.
+
+### Kapan dipecah lagi (kriteria, bukan tanggal)
+
+| Tambah | Saat |
+|---|---|
+| `packages/core` | Logika capture/template/print dipakai **>1 app** (mis. studio + shell Electron) |
+| `apps/gallery` | Butuh SSR + OG image yang SEO-nya kritis (sebelum itu: halaman server-rendered dari API cukup) |
+| `apps/web` (marketing) | Saat mau jualan |
+| `packages/{transports,ai,print,ui,i18n,db}` | Saat kode di dalam studio udah besar & jelas batasnya |
+| **Turborepo** | Build/CI mulai lambat, atau app >3 |
+| Nx / Bazel | Hampir nggak pernah, untuk proyek sebesar ini |
+
+Untuk MVP, `apps/studio/src/lib` sudah cukup menampung capture/template/print. Diangkat jadi package **kalau** ada consumer kedua — bukan sebelum.
 
 ---
 
-## 3. Modul inti (packages/core)
+## 3. Modul inti (hari-1: `apps/studio/src/lib`)
 
 ### 3.1 Capture engine
 State machine eksplisit — ini jantung aplikasi:
@@ -117,7 +132,7 @@ Token teks: `{event}`, `{date}`, `{time}`, `{custom}` — diganti saat compose.
 
 ---
 
-## 4. AI layer (packages/ai)
+## 4. AI layer (`apps/studio/src/lib/ai`)
 
 **Dua jalur, sengaja** — lokal default (gratis, offline, privat) + cloud opsional (kualitas tinggi, BYOK).
 
@@ -239,7 +254,7 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 
 ## 9. i18n
 
-- `i18next` + `react-i18next`, locale di `packages/i18n/locales/*.json`.
+- `i18next` + `react-i18next`, locale di `apps/studio/src/locales/*.json` (diangkat ke `packages/i18n` kalau ada app kedua).
 - Mulai **id + en**; struktur siap untuk 19 bahasa seperti mereka.
 - Format tanggal & angka pakai `Intl`.
 - Locale marketing (Next.js) pakai routing `/[locale]/...` + `hreflang`.
@@ -250,7 +265,7 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 
 | Fase | Isi | Hasil |
 |---|---|---|
-| **0** | Scaffold monorepo, tsconfig, eslint, CI, **service worker + offline shell (PWA)** | `pnpm dev` jalan; app kebuka & jalan tanpa internet |
+| **0** | Scaffold monorepo ramping (pnpm workspace, `shared`), tsconfig, eslint, CI, **service worker + offline shell (PWA)** | `pnpm dev` jalan; app kebuka & jalan tanpa internet |
 | **1** | Webcam capture + countdown + multi-shot + review/retake, **indikator online/offline** | Bisa foto dari webcam, termasuk saat offline |
 | **2** | Template engine + editor Konva + render strip | Bisa bikin & simpan template |
 | **3** | Print layout + print browser + download PNG/JPEG | Foto fisik + file |

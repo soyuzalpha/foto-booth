@@ -17,7 +17,7 @@ Isinya hasil riset + system design, belum ada kode aplikasi.
 
 **Produk:** aplikasi photo booth yang jalan di browser — capture dari webcam, template editor, cetak strip, kiosk mode, galeri tamu via QR. **Offline-first**: jaringan opsional, bukan syarat.
 
-**Stack:** TypeScript end-to-end — Vite + React (studio app, SPA) · Next.js (marketing + galeri) · Fastify + Zod + Drizzle (API) · Postgres + Redis + S3 · pnpm workspaces + Turborepo.
+**Stack:** TypeScript end-to-end — Vite + React (studio app, SPA) · Fastify + Zod + Drizzle (API) · Postgres + Redis + S3 · **pnpm workspace** (2 app + `shared`). Turborepo belum dipakai — lihat `docs/SYSTEM-DESIGN.md` §2 untuk kriteria kapan ditambah.
 
 **MVP = Fase 0–5:** scaffold + offline shell → capture → template → print → kiosk → galeri.
 **34 fitur MVP** (8 di antaranya offline) · 59 Post · 4 sengaja Skip.
