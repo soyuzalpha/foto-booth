@@ -28,7 +28,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 
 ## Peta fase
 
-**MVP = Fase 0–5.** Fase 6–12 = setelah MVP.
+**MVP = Fase 0–5.** Fase 6–13 = setelah MVP.
 
 | Fase | Isi | Ukuran | Status |
 |---|---|---|---|
@@ -43,8 +43,9 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
 | 9 | Leads + analytics + branding | M | `[ ]` |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
-| 11 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
-| 12 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
+| 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[ ]` |
+| 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
+| 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
 
 **Urutan kritis MVP:** `0 → 1 → 2 → 3 → 4 → 5`. Offline **bukan fase terpisah** — dibangun dari Fase 0 dan divalidasi ulang di tiap fase.
 
@@ -333,6 +334,83 @@ curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
 
 ---
 
+## Fase 11 — Booking & reservasi
+
+**Status:** `[ ]`
+**Gate masuk:** Fase 10 gate keluar terpenuhi (lisensi + payment QRIS jalan — deposit pakai jalur yang sama).
+**Tujuan:** klien bisa memesan jadwal sendiri, operator tidak lagi mencatat manual di WhatsApp.
+
+**Kenapa setelah Fase 10:** booking butuh **deposit QRIS** dan **email/reminder**. Payment (Fase 10) yang menyediakan itu — bikin booking lebih dulu = kerja dua kali.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| API | `apps/api/src/routes/booking/{availability,requests,approve,status}.ts` |
+| Publik | `apps/api/static/booking/` — halaman booking + halaman status (link unik) |
+| Studio | `apps/studio/src/lib/booking/*` + layar dashboard + kalender operator |
+| Shared | `packages/shared/src/schemas.ts` — Zod `ServicePackage`, `AvailabilitySlot`, `BookingRequest`, `Booking` |
+
+**Model data (di `packages/shared`)**
+
+- `ServicePackage` — `id`, `nama`, `durasi` (menit), `harga`, `deposit`, `aktif`
+- `AvailabilitySlot` — `tanggal`, `jamMulai`, `jamSelesai`, `tersedia`
+- `BookingRequest` — `id`, `paketId`, `nama`, `kontak`, `tanggal`, `slot`, `catatan`, `status`
+- `Booking` — `requestId`, `eventId`, `depositStatus`, `statusPelunasan`, `linkStatus` (token unik)
+- `status`: `requested → approved → confirmed → completed` · plus `rejected`, `cancelled`, `expired`
+
+**Task**
+
+- [ ] Halaman booking publik (tanpa login): pilih paket → tanggal → slot → isi data → kirim
+- [ ] Paket layanan + harga + deposit (CRUD di studio)
+- [ ] Kalender ketersediaan: hasil dari **jam operasional − booking ter-approve − tanggal diblokir**
+- [ ] Jam operasional + buffer antar-booking (configurable, mis. 30 menit bersih-bersih)
+- [ ] Blokir tanggal / tanggal tutup (libur, maintenance)
+- [ ] `POST /v1/booking/requests` → buat permintaan (status `requested`)
+- [ ] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
+- [ ] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
+- [ ] Konfirmasi via email + link WhatsApp siap kirim
+- [ ] Deposit QRIS → `depositStatus` berubah dari webhook (jalur Fase 10)
+- [ ] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
+- [ ] Reschedule oleh klien (batas: mis. minimal H-2)
+- [ ] Cancel oleh klien + kebijakan batas waktu (kebijakan refund deposit ditulis eksplisit di UI)
+- [ ] Reminder H-1 otomatis (job harian) via email + WhatsApp
+- [ ] Dashboard booking + kalender operator (harian/mingguan)
+- [ ] Invoice + kwitansi + lacak pelunasan
+- [ ] **Booking → event**: approve bikin record event + template default, jadi tidak perlu input ulang di hari-H
+- [ ] Laporan okupansi + pendapatan per periode
+- [ ] Export kalender `.ics`
+- [ ] Rate-limit form publik + honeypot (anti spam, karena tanpa login)
+- [ ] Halaman publik responsive + aksesibel (klien buka dari HP)
+
+**Kriteria terima (FEATURE-MATRIX):** baris modul **Booking** (18 baris, Fase 11)
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm --filter @foto-booth/api test
+pnpm --filter @foto-booth/studio test
+```
+
+- [ ] Alur end-to-end pakai script (bukan klik manual): request → approve → deposit → confirmed
+- [ ] **Double-booking ditolak**: dua request ke slot sama, yang kedua harus gagal dengan 409
+- [ ] Slot di luar jam operasional **dan** slot yang bertabrakan buffer ditolak
+- [ ] Tanggal diblokir → tidak muncul sebagai slot tersedia
+- [ ] Webhook deposit palsu (tanda tangan salah) → ditolak, `depositStatus` tidak berubah
+- [ ] Link status tanpa token / token salah → 404 (bukan bocor data booking orang lain)
+- [ ] Reminder H-1: uji dengan **tanggal dimajukan** (bukan tunggu sehari) → email/WA terkirim tepat sekali
+- [ ] Reschedule di bawah batas waktu → ditolak dengan pesan jelas
+- [ ] Approve → **record event benar-benar ada** dan bisa dipakai di studio (cek DB, bukan asumsi)
+- [ ] Form publik: submit 20× cepat → kena rate-limit
+- [ ] Ukur DOM: halaman booking di 390px — tidak ada elemen meluber (`scrollWidth <= clientWidth`)
+- [ ] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · alur booking→event terbukti end-to-end · anti double-booking & token link terbukti lewat tes · bukti ditulis.
+**Bukti:** —
+
+---
+
 ## Checklist QA MVP (dari `FEATURE-MATRIX.md` §D)
 
 Dijalankan penuh di **gate keluar Fase 5** sebelum MVP dianggap selesai.
@@ -354,9 +432,18 @@ Dijalankan penuh di **gate keluar Fase 5** sebelum MVP dianggap selesai.
 - [ ] Refresh tengah sesi → state tidak hilang (IndexedDB)
 - [ ] 20 sesi berturut-turut → tidak ada memory leak
 
+**Booking (Fase 11, dijalankan di gate keluar Fase 11):**
+
+- [ ] Request → approve → deposit → confirmed jalan end-to-end dari HP
+- [ ] Dua orang pesan slot sama → hanya satu yang lolos
+- [ ] Link status booking: token salah → 404
+- [ ] Reminder H-1 terkirim tepat sekali
+- [ ] Approve bikin event otomatis (tidak input ulang di hari-H)
+- [ ] Cancel/reschedule di luar kebijakan → ditolak dengan pesan jelas
+
 ---
 
-## Fase 6–12 (post-MVP) — ringkas
+## Fase 6–13 (post-MVP) — ringkas
 
 Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task & validasi tiap fase diisi saat fase itu dimulai — jangan disiapkan terlalu awal.
 
@@ -365,8 +452,9 @@ Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task
 - **Fase 8** — AI style/backdrop/upscale/enhance/remix (Gemini BYOK, diproxy lewat `/v1/ai/*`)
 - **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue
 - **Fase 10** — Lisensi + payment QRIS (Midtrans/Xendit) + webhook → aktivasi
-- **Fase 11** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
-- **Fase 12** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring
+- **Fase 11** — **Booking & reservasi** (detail lengkap di bawah) · halaman booking publik · kalender ketersediaan · approve/tolak · deposit QRIS · reminder H-1 · reschedule & cancel · dashboard operator · laporan okupansi
+- **Fase 12** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
+- **Fase 13** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring
 
 ---
 

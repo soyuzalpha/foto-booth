@@ -41,6 +41,14 @@ const done = (s) => s === 'x';
 let firstOpen = null;
 const problems = [];
 
+// Nomor fase harus berurutan 0..N tanpa bolong/duplikat — jaring pengaman
+// saat fase disisipkan atau digeser (mis. nambah Fase Booking).
+rows.forEach((r, i) => {
+  if (r.n !== i) {
+    problems.push(`Nomor fase tidak berurutan di baris ke-${i + 1}: ketemu Fase ${r.n}, harusnya Fase ${i}`);
+  }
+});
+
 for (const r of rows) {
   if (firstOpen === null && !done(r.state)) firstOpen = r.n;
   // fase yang dicentang padahal masih ada fase sebelumnya yang belum

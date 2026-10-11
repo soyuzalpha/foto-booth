@@ -284,8 +284,9 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 | **8** | AI style/backdrop/upscale (Gemini BYOK, diproxy) | Fitur headline |
 | **9** | Leads + analytics + branding/white-label | Sisi bisnis |
 | **10** | Lisensi + payment (Midtrans/Xendit) + akun | Bisa dijual |
-| **11** | Desktop (Electron) + mobile (Capacitor) | Multi-platform |
-| **12** | DSLR WebUSB/PTP | Paritas penuh |
+| **11** | **Booking & reservasi** (kalender ketersediaan, approve/tolak, deposit QRIS, reminder H-1, reschedule/cancel, dashboard operator, laporan okupansi, booking → event) | Klien pesan sendiri; operator tidak catat manual |
+| **12** | Desktop (Electron) + mobile (Capacitor) | Multi-platform |
+| **13** | DSLR WebUSB/PTP | Paritas penuh |
 
 **MVP yang bisa dipakai orang = Fase 0–5** (Fase 0 sudah termasuk offline shell). Fase 6–8 yang bikin "wah".
 

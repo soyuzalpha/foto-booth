@@ -90,12 +90,12 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | Template | vignette background | Post | 3 |
 | Template | shadow elemen | Post | 3 |
 | Template | starter template bawaan | Post | 3 |
-| Template | **template marketplace** | Post | 12 |
+| Template | **template marketplace** | Post | 13 |
 | **Print** | preset 2×6 strip + 4×6 | **MVP** | 3 |
 | Print | print browser (iframe) | **MVP** | 3 |
 | Print | download PNG/JPEG | **MVP** | 3 |
 | Print | auto print + copies | Post | 9 |
-| Print | pilih printer + deteksi USB printer | Post | 11 |
+| Print | pilih printer + deteksi USB printer | Post | 12 |
 | Print | print queue + retry + reprint | Post | 9 |
 | **Kiosk** | fullscreen | **MVP** | 4 |
 | Kiosk | idle timeout auto reset | **MVP** | 4 |
@@ -112,7 +112,7 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | Sharing | **share WhatsApp (deep link)** | Post | 9 |
 | Sharing | branded share page + OG image | Post | 9 |
 | Sharing | branding (logo/heading/subheading) | Post | 9 |
-| Sharing | white-label | Post | 12 |
+| Sharing | white-label | Post | 13 |
 | **Offline** | **service worker: app shell + studio offline** | **MVP** | 0 |
 | Offline | indikator status online/offline | **MVP** | 1 |
 | Offline | foto disimpan lokal dulu (IndexedDB + OPFS) | **MVP** | 5 |
@@ -122,7 +122,7 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | Offline | **kiosk full-offline (event tanpa backend)** | **MVP** | 4 |
 | Offline | PWA installable | **MVP** | 1 |
 | Offline | storage location picker (File System Access) | Post | 6 |
-| Offline | sinkron multi-device (event sama, 2 device) | Post | 12 |
+| Offline | sinkron multi-device (event sama, 2 device) | Post | 13 |
 | **Leads** | field custom (text/email/phone/select/checkbox) | Post | 9 |
 | Leads | required + consent text + skip | Post | 9 |
 | Leads | export CSV | Post | 9 |
@@ -130,28 +130,46 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | **Analytics** | view analytics | Post | 9 |
 | Analytics | analytics dashboard per event | Post | 9 |
 | Analytics | debug mode + cek storage | Post | 6 |
-| Analytics | cek USB printer | Post | 11 |
-| Analytics | kirim laporan diagnosa via email | Post | 11 |
-| Analytics | remote monitoring realtime (WebSocket) | Post | 12 |
+| Analytics | cek USB printer | Post | 12 |
+| Analytics | kirim laporan diagnosa via email | Post | 12 |
+| Analytics | remote monitoring realtime (WebSocket) | Post | 13 |
 | **Infra** | auth email OTP → JWT | **MVP** | 5 |
 | Infra | lisensi / entitlement | **MVP** | 5 |
 | Infra | payment QRIS (Midtrans/Xendit) | Post | 10 |
 | Infra | i18n id + en | **MVP** | 1 |
 | Infra | Sentry error tracking | Post | 6 |
-| Infra | desktop Electron | Post | 11 |
-| Infra | mobile Capacitor (Android/iOS) | Post | 11 |
+| Infra | desktop Electron | Post | 12 |
+| Infra | mobile Capacitor (Android/iOS) | Post | 12 |
 | **Transport** | webcam (getUserMedia) | **MVP** | 1 |
 | Transport | fake transport (test/CI) | **MVP** | 1 |
 | Transport | HDMI capture card | Post | 6 |
-| Transport | phone-as-camera (WebRTC) | Post | 12 |
-| Transport | DSLR WebUSB + PTP | Post | 12 |
-| Transport | DSLR PTP/IP (network) | Post | 12 |
+| Transport | phone-as-camera (WebRTC) | Post | 13 |
+| Transport | DSLR WebUSB + PTP | Post | 13 |
+| Transport | DSLR PTP/IP (network) | Post | 13 |
+| **Booking** | halaman booking publik + form | Post | 11 |
+| Booking | paket layanan + harga + deposit | Post | 11 |
+| Booking | kalender ketersediaan + slot waktu | Post | 11 |
+| Booking | jam operasional + buffer antar-booking | Post | 11 |
+| Booking | blokir tanggal / tanggal tutup | Post | 11 |
+| Booking | permintaan booking (request) | Post | 11 |
+| Booking | approve / tolak oleh operator | Post | 11 |
+| Booking | konfirmasi email + WhatsApp | Post | 11 |
+| Booking | deposit QRIS | Post | 11 |
+| Booking | halaman status booking (link unik, tanpa login) | Post | 11 |
+| Booking | reschedule oleh klien | Post | 11 |
+| Booking | cancel oleh klien + kebijakan batas waktu | Post | 11 |
+| Booking | reminder H-1 otomatis | Post | 11 |
+| Booking | dashboard booking + kalender operator | Post | 11 |
+| Booking | invoice + kwitansi + lacak pelunasan | Post | 11 |
+| Booking | booking -> event (data nyambung ke app) | Post | 11 |
+| Booking | laporan okupansi + pendapatan | Post | 11 |
+| Booking | export kalender (.ics) | Post | 11 |
 | **Skip** | langganan bulanan | **Skip** | — |
 | Skip | kredit AI bermeter | **Skip** | — |
 | Skip | watermark paksa di hasil | **Skip** | — |
 | Skip | pakai nama/logo/aset SLR Booth | **Skip** | — |
 
-**Hitung:** **34 fitur MVP** · **59 fitur Post** · **4 Skip** = **97 baris** (217 key i18n dikelompokkan jadi 97 fitur).
+**Hitung:** **34 fitur MVP** · **77 fitur Post** · **4 Skip** = **115 baris** (217 key i18n dikelompokkan jadi 97 fitur).
 Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 **8 dari 34 fitur MVP adalah Offline** (plus 2 Post) — offline bukan fitur tambahan, ini properti inti aplikasi.
 
@@ -183,7 +201,7 @@ Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 - i18n id/en
 - PWA installable
 
-**Tidak masuk MVP (sengaja):** video/slow-mo, green screen, semua AI, leads, analytics, payment, Electron/Capacitor, DSLR, marketplace, white-label.
+**Tidak masuk MVP (sengaja):** video/slow-mo, green screen, semua AI, leads, analytics, payment, booking/reservasi, Electron/Capacitor, DSLR, marketplace, white-label.
 
 **Kenapa batas ini:** Fase 0–5 sudah = produk yang bisa dijual & dipakai di event nyata. Fase 6–8 (efek + AI) itu yang bikin "wah" tapi bukan syarat bisa jalan; Fase 9–12 itu sisi bisnis & platform.
 
