@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  # Tombol "Run workflow" di tab Actions: redeploy tanpa commit.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,7 +23,7 @@ jobs:
     # repo sendiri. Fork tidak bisa menyentuh runner rumah.
     if: >-
       github.repository == 'soyuzalpha/foto-booth' &&
-      github.event_name == 'push'
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
     # Skema mengikuti aseppp-web: build image, jalankan container uji di port
     # terpisah, health check, baru ganti container produksi.
