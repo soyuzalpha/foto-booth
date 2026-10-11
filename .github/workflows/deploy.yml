@@ -8,9 +8,20 @@ on:
 permissions:
   contents: read
 
+# Dua push berturut-turut jangan saling menimpa container produksi.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: self-hosted
+
+    # Sabuk pengaman: repo ini publik, jadi tolak apa pun yang bukan push ke
+    # repo sendiri. Fork tidak bisa menyentuh runner rumah.
+    if: >-
+      github.repository == 'soyuzalpha/foto-booth' &&
+      github.event_name == 'push'
 
     # Skema mengikuti aseppp-web: build image, jalankan container uji di port
     # terpisah, health check, baru ganti container produksi.
