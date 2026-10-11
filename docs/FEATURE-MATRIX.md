@@ -11,12 +11,12 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 
 | # | Modul | Fitur wajib MVP | Kriteria terima (acceptance) |
 |---|---|---|---|
-| 1 | Capture | Live preview webcam (`getUserMedia`) | Preview tampil < 2 s, resolusi ≥ 1280×720 |
+| 1 | Capture | Live preview kamera: webcam **atau** capture card HDMI/UVC (`getUserMedia`) | Preview tampil < 2 s, resolusi ≥ 1280×720; capture card 1080p terbaca |
 | 2 | Capture | Countdown sebelum jepret (bisa on/off) | Hitungan 3-2-1 terlihat, durasi configurable |
 | 3 | Capture | Multi-shot 1..N frame | N bisa diatur (mis. 3/4/6); tiap frame tersimpan |
 | 4 | Capture | Review + retake per frame | User bisa ulangi 1 frame tanpa ulang semua |
 | 5 | Capture | Mirror + aspect ratio 1:1 / 16:9 / 3:2 | Ganti rasio → preview & hasil ikut berubah |
-| 6 | Capture | Pilih kamera (device id) | Dropdown daftar kamera dari `enumerateDevices` |
+| 6 | Capture | Pilih sumber kamera (webcam / capture card HDMI) | Dropdown dari `enumerateDevices`; capture card ditandai terpisah dari webcam |
 | 7 | Template | Model template = JSON (`size`,`background`,`frames`,`textElements`,`stickers`) | JSON valid → bisa disimpan & dimuat ulang |
 | 8 | Template | Editor drag-drop (Konva) | Elemen bisa digeser/resize/rotate, undo |
 | 9 | Template | Teks dinamis token `{event}` `{date}` | Token ter-substitusi saat compose |
@@ -51,125 +51,130 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 
 ## B. Tabel lengkap: MVP vs Post vs Skip
 
-| Modul | Fitur | Status | Fase |
-|---|---|---|---|
-| **Capture** | countdown / tanpa countdown | **MVP** | 1 |
-| Capture | mirror | **MVP** | 1 |
-| Capture | allow retake | **MVP** | 1 |
-| Capture | durasi review | **MVP** | 1 |
-| Capture | aspect 1:1 / 16:9 / 3:2 | **MVP** | 1 |
-| Capture | pilih kamera (device id) | **MVP** | 1 |
-| Capture | rotasi 0/90/180/270 | Post | 6 |
-| Capture | image quality (preset) | Post | 6 |
-| Capture | shutter offset | Post | 6 |
-| Capture | auto-connect camera | Post | 6 |
-| **Video** | snapshot / slow-mo | Post | 7 |
-| Video | resolusi + frame rate + max duration | Post | 7 |
-| Video | slow-mo factor ½ / ¼ | Post | 7 |
-| Video | output FPS 24/30/60 | Post | 7 |
-| Video | output quality 480/720/1080/2160 | Post | 7 |
-| Video | rekam audio | Post | 7 |
-| Video | video guestbook | Post | 9 |
-| Video | animasi slideshow / boomerang | Post | 7 |
-| **Green screen** | chromaKey (color/similarity/smoothness/spill) | Post | 6 |
-| Green screen | virtualBackground blur / ai | Post | 6 |
-| Green screen | adjustments (brightness/contrast/saturation) | Post | 6 |
-| Green screen | faceEnhance (GFPGAN) | Post | 6 |
-| **AI** | aiStyle (anime/3D/comic/watercolor/oil/custom) | Post | 8 |
-| AI | aiEnhance | Post | 8 |
-| AI | AI remix (boomerang remix) | Post | 8 |
-| AI | AI backdrop | Post | 8 |
-| AI | AI upscale | Post | 8 |
-| AI | AI template elements | Post | 8 |
-| AI | AI slow-motion (RIFE) | Post | 7 |
-| **Template** | model JSON (size/bg/frames/text/stickers) | **MVP** | 2 |
-| Template | editor drag-drop Konva | **MVP** | 2 |
-| Template | token {event}/{date} | **MVP** | 2 |
-| Template | render + export PNG | **MVP** | 2 |
-| Template | simpan / muat template | **MVP** | 2 |
-| Template | vignette background | Post | 3 |
-| Template | shadow elemen | Post | 3 |
-| Template | starter template bawaan | Post | 3 |
-| Template | **template marketplace** | Post | 13 |
-| **Print** | preset 2×6 strip + 4×6 | **MVP** | 3 |
-| Print | print browser (iframe) | **MVP** | 3 |
-| Print | download PNG/JPEG | **MVP** | 3 |
-| Print | auto print + copies | Post | 9 |
-| Print | pilih printer + deteksi USB printer | Post | 12 |
-| Print | print queue + retry + reprint | Post | 9 |
-| **Kiosk** | fullscreen | **MVP** | 4 |
-| Kiosk | idle timeout auto reset | **MVP** | 4 |
-| Kiosk | PIN lock | **MVP** | 4 |
-| Kiosk | tap to start + wake lock | **MVP** | 4 |
-| Kiosk | toggle tombol gallery/print/share | Post | 9 |
-| Kiosk | warning keluar | Post | 9 |
-| **Sharing** | QR code | **MVP** | 5 |
-| Sharing | online gallery + password | **MVP** | 5 |
-| Sharing | TTL 30 hari | **MVP** | 5 |
-| Sharing | email share | Post | 9 |
-| Sharing | SMS share | Post | 9 |
-| Sharing | sosial media share | Post | 9 |
-| Sharing | **share WhatsApp (deep link)** | Post | 9 |
-| Sharing | branded share page + OG image | Post | 9 |
-| Sharing | branding (logo/heading/subheading) | Post | 9 |
-| Sharing | white-label | Post | 13 |
-| **Offline** | **service worker: app shell + studio offline** | **MVP** | 0 |
-| Offline | indikator status online/offline | **MVP** | 1 |
-| Offline | foto disimpan lokal dulu (IndexedDB + OPFS) | **MVP** | 5 |
-| Offline | queue upload + status + retry | **MVP** | 5 |
-| Offline | auto-sync saat online kembali | **MVP** | 5 |
-| Offline | cache konten (template/frame/sticker/font) | **MVP** | 3 |
-| Offline | **kiosk full-offline (event tanpa backend)** | **MVP** | 4 |
-| Offline | PWA installable | **MVP** | 1 |
-| Offline | storage location picker (File System Access) | Post | 6 |
-| Offline | sinkron multi-device (event sama, 2 device) | Post | 13 |
-| **Leads** | field custom (text/email/phone/select/checkbox) | Post | 9 |
-| Leads | required + consent text + skip | Post | 9 |
-| Leads | export CSV | Post | 9 |
-| Leads | consent UU PDP | Post | 9 |
-| **Analytics** | view analytics | Post | 9 |
-| Analytics | analytics dashboard per event | Post | 9 |
-| Analytics | debug mode + cek storage | Post | 6 |
-| Analytics | cek USB printer | Post | 12 |
-| Analytics | kirim laporan diagnosa via email | Post | 12 |
-| Analytics | remote monitoring realtime (WebSocket) | Post | 13 |
-| **Infra** | auth email OTP → JWT | **MVP** | 5 |
-| Infra | lisensi / entitlement | **MVP** | 5 |
-| Infra | payment QRIS (Midtrans/Xendit) | Post | 10 |
-| Infra | i18n id + en | **MVP** | 1 |
-| Infra | Sentry error tracking | Post | 6 |
-| Infra | desktop Electron | Post | 12 |
-| Infra | mobile Capacitor (Android/iOS) | Post | 12 |
-| **Transport** | webcam (getUserMedia) | **MVP** | 1 |
-| Transport | fake transport (test/CI) | **MVP** | 1 |
-| Transport | HDMI capture card | Post | 6 |
-| Transport | phone-as-camera (WebRTC) | Post | 13 |
-| Transport | DSLR WebUSB + PTP | Post | 13 |
-| Transport | DSLR PTP/IP (network) | Post | 13 |
-| **Booking** | halaman booking publik + form | Post | 11 |
-| Booking | paket layanan + harga + deposit | Post | 11 |
-| Booking | kalender ketersediaan + slot waktu | Post | 11 |
-| Booking | jam operasional + buffer antar-booking | Post | 11 |
-| Booking | blokir tanggal / tanggal tutup | Post | 11 |
-| Booking | permintaan booking (request) | Post | 11 |
-| Booking | approve / tolak oleh operator | Post | 11 |
-| Booking | konfirmasi email + WhatsApp | Post | 11 |
-| Booking | deposit QRIS | Post | 11 |
-| Booking | halaman status booking (link unik, tanpa login) | Post | 11 |
-| Booking | reschedule oleh klien | Post | 11 |
-| Booking | cancel oleh klien + kebijakan batas waktu | Post | 11 |
-| Booking | reminder H-1 otomatis | Post | 11 |
-| Booking | dashboard booking + kalender operator | Post | 11 |
-| Booking | invoice + kwitansi + lacak pelunasan | Post | 11 |
-| Booking | booking -> event (data nyambung ke app) | Post | 11 |
-| Booking | laporan okupansi + pendapatan | Post | 11 |
-| Booking | export kalender (.ics) | Post | 11 |
-| **Skip** | langganan bulanan | **Skip** | — |
-| Skip | kredit AI bermeter | **Skip** | — |
-| Skip | watermark paksa di hasil | **Skip** | — |
-| Skip | pakai nama/logo/aset SLR Booth | **Skip** | — |
+| # | Modul | Fitur | Status | Fase |
+|---|---|---|---|---|
+| 1 | **Capture** | countdown / tanpa countdown | **MVP** | 1 |
+| 2 | Capture | mirror | **MVP** | 1 |
+| 3 | Capture | allow retake | **MVP** | 1 |
+| 4 | Capture | durasi review | **MVP** | 1 |
+| 5 | Capture | aspect 1:1 / 16:9 / 3:2 | **MVP** | 1 |
+| 6 | Capture | pilih kamera (device id) | **MVP** | 1 |
+| 7 | Capture | still resolusi penuh via `ImageCapture.takePhoto()` (fallback canvas) | **MVP** | 1 |
+| 8 | Capture | mirror default **mati** untuk sumber capture card | **MVP** | 1 |
+| 9 | Capture | rotasi 0/90/180/270 | Post | 6 |
+| 10 | Capture | image quality (preset) | Post | 6 |
+| 11 | Capture | shutter offset | Post | 6 |
+| 12 | Capture | auto-connect camera | Post | 6 |
+| 13 | **Video** | snapshot / slow-mo | Post | 7 |
+| 14 | Video | resolusi + frame rate + max duration | Post | 7 |
+| 15 | Video | slow-mo factor ½ / ¼ | Post | 7 |
+| 16 | Video | output FPS 24/30/60 | Post | 7 |
+| 17 | Video | output quality 480/720/1080/2160 | Post | 7 |
+| 18 | Video | rekam audio | Post | 7 |
+| 19 | Video | video guestbook | Post | 9 |
+| 20 | Video | animasi slideshow / boomerang | Post | 7 |
+| 21 | **Green screen** | chromaKey (color/similarity/smoothness/spill) | Post | 6 |
+| 22 | Green screen | virtualBackground blur / ai | Post | 6 |
+| 23 | Green screen | adjustments (brightness/contrast/saturation) | Post | 6 |
+| 24 | Green screen | faceEnhance (GFPGAN) | Post | 6 |
+| 25 | **AI** | aiStyle (anime/3D/comic/watercolor/oil/custom) | Post | 8 |
+| 26 | AI | aiEnhance | Post | 8 |
+| 27 | AI | AI remix (boomerang remix) | Post | 8 |
+| 28 | AI | AI backdrop | Post | 8 |
+| 29 | AI | AI upscale | Post | 8 |
+| 30 | AI | AI template elements | Post | 8 |
+| 31 | AI | AI slow-motion (RIFE) | Post | 7 |
+| 32 | **Template** | model JSON (size/bg/frames/text/stickers) | **MVP** | 2 |
+| 33 | Template | editor drag-drop Konva | **MVP** | 2 |
+| 34 | Template | token {event}/{date} | **MVP** | 2 |
+| 35 | Template | render + export PNG | **MVP** | 2 |
+| 36 | Template | simpan / muat template | **MVP** | 2 |
+| 37 | Template | vignette background | Post | 3 |
+| 38 | Template | shadow elemen | Post | 3 |
+| 39 | Template | starter template bawaan | Post | 3 |
+| 40 | Template | **template marketplace** | Post | 13 |
+| 41 | **Print** | preset 2×6 strip + 4×6 | **MVP** | 3 |
+| 42 | Print | print browser (iframe) | **MVP** | 3 |
+| 43 | Print | download PNG/JPEG | **MVP** | 3 |
+| 44 | Print | auto print + copies | Post | 9 |
+| 45 | Print | pilih printer + deteksi USB printer | Post | 12 |
+| 46 | Print | print queue + retry + reprint | Post | 9 |
+| 47 | **Kiosk** | fullscreen | **MVP** | 4 |
+| 48 | Kiosk | idle timeout auto reset | **MVP** | 4 |
+| 49 | Kiosk | PIN lock | **MVP** | 4 |
+| 50 | Kiosk | tap to start + wake lock | **MVP** | 4 |
+| 51 | Kiosk | toggle tombol gallery/print/share | Post | 9 |
+| 52 | Kiosk | warning keluar | Post | 9 |
+| 53 | **Sharing** | QR code | **MVP** | 5 |
+| 54 | Sharing | online gallery + password | **MVP** | 5 |
+| 55 | Sharing | TTL 30 hari | **MVP** | 5 |
+| 56 | Sharing | email share | Post | 9 |
+| 57 | Sharing | SMS share | Post | 9 |
+| 58 | Sharing | sosial media share | Post | 9 |
+| 59 | Sharing | **share WhatsApp (deep link)** | Post | 9 |
+| 60 | Sharing | branded share page + OG image | Post | 9 |
+| 61 | Sharing | branding (logo/heading/subheading) | Post | 9 |
+| 62 | Sharing | white-label | Post | 13 |
+| 63 | **Offline** | **service worker: app shell + studio offline** | **MVP** | 0 |
+| 64 | Offline | indikator status online/offline | **MVP** | 1 |
+| 65 | Offline | foto disimpan lokal dulu (IndexedDB + OPFS) | **MVP** | 5 |
+| 66 | Offline | queue upload + status + retry | **MVP** | 5 |
+| 67 | Offline | auto-sync saat online kembali | **MVP** | 5 |
+| 68 | Offline | cache konten (template/frame/sticker/font) | **MVP** | 3 |
+| 69 | Offline | **kiosk full-offline (event tanpa backend)** | **MVP** | 4 |
+| 70 | Offline | PWA installable | **MVP** | 1 |
+| 71 | Offline | storage location picker (File System Access) | Post | 6 |
+| 72 | Offline | sinkron multi-device (event sama, 2 device) | Post | 13 |
+| 73 | **Leads** | field custom (text/email/phone/select/checkbox) | Post | 9 |
+| 74 | Leads | required + consent text + skip | Post | 9 |
+| 75 | Leads | export CSV | Post | 9 |
+| 76 | Leads | consent UU PDP | Post | 9 |
+| 77 | **Analytics** | view analytics | Post | 9 |
+| 78 | Analytics | analytics dashboard per event | Post | 9 |
+| 79 | Analytics | debug mode + cek storage | Post | 6 |
+| 80 | Analytics | cek USB printer | Post | 12 |
+| 81 | Analytics | kirim laporan diagnosa via email | Post | 12 |
+| 82 | Analytics | remote monitoring realtime (WebSocket) | Post | 13 |
+| 83 | **Infra** | auth email OTP → JWT | **MVP** | 5 |
+| 84 | Infra | lisensi / entitlement | **MVP** | 5 |
+| 85 | Infra | payment QRIS (Midtrans/Xendit) | Post | 10 |
+| 86 | Infra | i18n id + en | **MVP** | 1 |
+| 87 | Infra | Sentry error tracking | Post | 6 |
+| 88 | Infra | desktop Electron | Post | 12 |
+| 89 | Infra | mobile Capacitor (Android/iOS) | Post | 12 |
+| 90 | **Transport** | webcam (getUserMedia) | **MVP** | 1 |
+| 91 | Transport | fake transport (test/CI) | **MVP** | 1 |
+| 92 | Transport | **capture card HDMI (UVC)** — DSLR/mirrorless live view | **MVP** | 1 |
+| 93 | Transport | deteksi sinyal hilang (HDMI lepas / kamera tidur) | **MVP** | 1 |
+| 94 | Transport | resolusi & framerate dari `getCapabilities()` + `applyConstraints` | **MVP** | 1 |
+| 95 | Transport | klasifikasi device: webcam vs capture card | **MVP** | 1 |
+| 96 | Transport | phone-as-camera (WebRTC) | Post | 13 |
+| 97 | Transport | DSLR WebUSB + PTP | Post | 13 |
+| 98 | Transport | DSLR PTP/IP (network) | Post | 13 |
+| 99 | **Booking** | halaman booking publik + form | Post | 11 |
+| 100 | Booking | paket layanan + harga + deposit | Post | 11 |
+| 101 | Booking | kalender ketersediaan + slot waktu | Post | 11 |
+| 102 | Booking | jam operasional + buffer antar-booking | Post | 11 |
+| 103 | Booking | blokir tanggal / tanggal tutup | Post | 11 |
+| 104 | Booking | permintaan booking (request) | Post | 11 |
+| 105 | Booking | approve / tolak oleh operator | Post | 11 |
+| 106 | Booking | konfirmasi email + WhatsApp | Post | 11 |
+| 107 | Booking | deposit QRIS | Post | 11 |
+| 108 | Booking | halaman status booking (link unik, tanpa login) | Post | 11 |
+| 109 | Booking | reschedule oleh klien | Post | 11 |
+| 110 | Booking | cancel oleh klien + kebijakan batas waktu | Post | 11 |
+| 111 | Booking | reminder H-1 otomatis | Post | 11 |
+| 112 | Booking | dashboard booking + kalender operator | Post | 11 |
+| 113 | Booking | invoice + kwitansi + lacak pelunasan | Post | 11 |
+| 114 | Booking | booking -> event (data nyambung ke app) | Post | 11 |
+| 115 | Booking | laporan okupansi + pendapatan | Post | 11 |
+| 116 | Booking | export kalender (.ics) | Post | 11 |
+| 117 | **Skip** | langganan bulanan | **Skip** | — |
+| 118 | Skip | kredit AI bermeter | **Skip** | — |
+| 119 | Skip | watermark paksa di hasil | **Skip** | — |
+| 120 | Skip | pakai nama/logo/aset SLR Booth | **Skip** | — |
 
-**Hitung:** **34 fitur MVP** · **77 fitur Post** · **4 Skip** = **115 baris** (217 key i18n dikelompokkan jadi 97 fitur).
+**Hitung:** **40 fitur MVP** · **76 fitur Post** · **4 Skip** = **120 baris** (217 key i18n dikelompokkan jadi 97 fitur).
 Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 **8 dari 34 fitur MVP adalah Offline** (plus 2 Post) — offline bukan fitur tambahan, ini properti inti aplikasi.
 
@@ -177,7 +182,7 @@ Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 
 ## C. Definisi MVP (scope rilis pertama)
 
-**MVP = Fase 0–5.** Satu kalimat: *"Satu laptop + webcam, orang bisa foto, pilih template, hasilnya jadi strip, bisa diprint, dan tamu bisa ambil fotonya lewat QR — **semua jalan walau internet mati**."*
+**MVP = Fase 0–5.** Satu kalimat: *"Satu laptop + webcam (atau kamera DSLR/mirrorless lewat capture card HDMI), orang bisa foto, pilih template, hasilnya jadi strip, bisa diprint, dan tamu bisa ambil fotonya lewat QR — **semua jalan walau internet mati**."*
 
 ### Mode operasi (wajib)
 
@@ -192,7 +197,7 @@ Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 ### Masuk MVP
 - **Offline penuh** — app shell + studio jalan tanpa internet (service worker)
 - **Offline** — foto lokal dulu (IndexedDB + OPFS) · queue upload + auto-sync · indikator status · konten ter-cache · kiosk full-offline
-- Webcam capture + countdown + multi-shot + retake
+- Capture: **webcam + capture card HDMI/UVC** (DSLR/mirrorless live view) + countdown + multi-shot + retake
 - Template JSON + editor Konva + render strip
 - Print 2×6 / 4×6 + download
 - Kiosk fullscreen + PIN + idle reset
@@ -201,7 +206,10 @@ Tabel A di atas memecah MVP jadi **33 baris kriteria terima**.
 - i18n id/en
 - PWA installable
 
-**Tidak masuk MVP (sengaja):** video/slow-mo, green screen, semua AI, leads, analytics, payment, booking/reservasi, Electron/Capacitor, DSLR, marketplace, white-label.
+**Tidak masuk MVP (sengaja):** video/slow-mo, green screen, semua AI, leads, analytics, payment, booking/reservasi, Electron/Capacitor, **kontrol DSLR via USB (WebUSB/PTP)**, marketplace, white-label.
+
+> **Catatan penting:** "DSLR" yang **tidak** masuk MVP itu = kontrol kamera lewat **USB/WebUSB (PTP)** — butuh implementasi protokol dari nol, Chrome-only.
+> DSLR/mirrorless **via HDMI capture card** **MASUK MVP (Fase 1)**, karena capture card itu device **UVC** biasa: browser lihatnya sebagai webcam, jadi cukup `getUserMedia`.
 
 **Kenapa batas ini:** Fase 0–5 sudah = produk yang bisa dijual & dipakai di event nyata. Fase 6–8 (efek + AI) itu yang bikin "wah" tapi bukan syarat bisa jalan; Fase 9–12 itu sisi bisnis & platform.
 

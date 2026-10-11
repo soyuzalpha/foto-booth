@@ -4,6 +4,8 @@ Dokumen ini **satu-satunya sumber kebenaran** untuk progres fase. Update di comm
 
 Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (kriteria terima MVP) & §D (checklist QA).
 
+**Cara baca rujukan:** `§A<n>` = baris ke-`n` tabel MVP di `FEATURE-MATRIX.md` §A (nomornya stabil). `§B Fase = n` = semua baris tabel lengkap §B yang kolom *Fase*-nya `n` — tidak dihitung manual, jadi tidak basi saat baris ditambah.
+
 ---
 
 ## Protokol gate (aturan main)
@@ -33,7 +35,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | Fase | Isi | Ukuran | Status |
 |---|---|---|---|
 | **0** | Scaffold monorepo + offline shell + CI deploy | L | `[x]` **selesai** |
-| **1** | Capture engine (webcam, countdown, multi-shot, review) | L | `[ ]` |
+| **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[ ]` |
 | **2** | Template engine + editor Konva + render strip | L | `[ ]` |
 | **3** | Print layout + print browser + download | M | `[ ]` |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
@@ -84,7 +86,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 - [x] `workflow_dispatch` (redeploy tanpa commit)
 - [x] Indikator online/offline + status service worker + persist storage (skeleton)
 
-**Kriteria terima (FEATURE-MATRIX):** baris 25 (app shell offline), 116 (service worker Fase 0)
+**Kriteria terima (FEATURE-MATRIX):** §A25 (app shell offline) · §B semua baris dengan **Fase = 0**
 
 **Validasi**
 
@@ -119,47 +121,90 @@ done
 
 ---
 
-## Fase 1 — Capture engine
+## Fase 1 — Capture engine (webcam + capture card HDMI)
 
 **Status:** `[ ]`
 **Gate masuk:** Fase 0 gate keluar terpenuhi.
-**Tujuan:** bisa foto dari webcam — countdown, multi-shot, review/retake — **termasuk saat offline**.
+**Tujuan:** bisa foto dari **webcam** atau **kamera DSLR/mirrorless lewat capture card HDMI** — countdown, multi-shot, review/retake — **termasuk saat offline**.
 
-**Deliverable:** `apps/studio/src/lib/capture/*` (`CaptureSession` state machine, event bus), `apps/studio/src/lib/transports/*` (`WebcamTransport`, `FakeTransport`), UI capture + review.
+### Soal "HDMI" — apa yang sebenarnya terjadi
+
+Capture card HDMI (Elgato Cam Link, AVerMedia, dongle MS2109, dll) itu device **UVC** — satu kelas dengan webcam. Browser lihatnya sebagai kamera biasa, jadi cukup `getUserMedia`. **Tidak perlu driver, tidak perlu WebUSB, jalan di semua browser.** Yang perlu dikerjakan bukan "dukungan HDMI", tapi **memperlakukan capture card berbeda dari webcam** di tempat yang memang beda:
+
+| | Webcam | Capture card HDMI |
+|---|---|---|
+| Mirror default | nyala | **mati** (kamera sudah orientasi benar; mirror bikin teks/logo kebalik) |
+| Resolusi | 720p–1080p | 1080p60 / 2160p30 (tergantung card) |
+| Sinyal | selalu ada | **bisa hilang** (HDMI lepas, kamera tidur) |
+| Warm-up | instan | 1–3 s sebelum frame pertama valid |
+| Audio | biasanya tidak | sering ada (track terpisah) |
+
+**Ini BUKAN hal yang sama dengan Fase 13.** Fase 13 = kontrol DSLR via **WebUSB + protokol PTP** (jepret dari app, ambil still full-res, Chrome-only, paling berat). Fase 1 = **menerima video** dari kamera lewat HDMI. Yang berat tetap di Fase 13.
+
+**Deliverable:** `apps/studio/src/lib/capture/*` (`CaptureSession` state machine, event bus) · `apps/studio/src/lib/transports/*` (`CameraTransport`, `UvcTransport`, `FakeTransport`, `DeviceProfile`, `SignalMonitor`, `stillCapture`) · UI capture + review.
 
 **Task**
 
 - [ ] State machine eksplisit `idle → armed → countdown → capturing → review → processing → composed`
 - [ ] `CaptureSession`: multi-shot 1..N, countdown per frame (on/off, durasi configurable), delay antar shot
 - [ ] `Frame { id, blob, exif, ts, shotIndex }` + event bus (`frame:captured`)
-- [ ] `CameraTransport` interface + `WebcamTransport` (getUserMedia) + `FakeTransport` (untuk tes/CI)
-- [ ] Pilih kamera dari `enumerateDevices`
-- [ ] Mirror + aspect ratio 1:1 / 16:9 / 3:2 (preview & hasil ikut berubah)
+- [ ] `CameraTransport` interface + `UvcTransport` + `FakeTransport` (test/CI)
+- [ ] `UvcTransport` melayani **webcam DAN capture card HDMI** (dua-duanya UVC — satu jalur kode)
+- [ ] `DeviceProfile`: klasifikasi webcam vs capture card + `source` + label yang bisa dibaca operator
+- [ ] Pilih sumber kamera dari `enumerateDevices` — capture card **ditandai terpisah** dari webcam
+- [ ] Resolusi & framerate: baca `getCapabilities()`, pilih mode terbaik, terapkan lewat `applyConstraints`
+- [ ] Still resolusi penuh via `ImageCapture.takePhoto()`; **fallback canvas** `drawImage` + `toBlob` (Safari/Firefox tidak punya ImageCapture)
+- [ ] Mirror otomatis: nyala untuk webcam, **mati** untuk capture card (masih bisa di-override)
+- [ ] Deteksi sinyal hilang: frame beku/hitam → overlay "tidak ada sinyal HDMI" + auto-recover saat sinyal balik
+- [ ] Tangani `devicechange`: kamera dicabut/dicolok saat app sedang jalan
+- [ ] Warm-up: jangan jepret sebelum frame pertama benar-benar valid (bukan cuma `readyState === 'live'`)
+- [ ] Error handling jelas: permission ditolak (`NotAllowedError`), device dipakai app lain (`NotReadableError`), device tidak ada (`NotFoundError`)
+- [ ] Aspect ratio 1:1 / 16:9 / 3:2 (preview & hasil ikut berubah)
 - [ ] Review + retake **per frame** (tanpa ulang semua)
 - [ ] Frame disimpan ke IndexedDB saat itu juga (tahan refresh)
 - [ ] Indikator online/offline akurat + PWA installable + i18n id/en lengkap
 - [ ] `prefers-reduced-motion` untuk animasi countdown
 
-**Kriteria terima (FEATURE-MATRIX):** 1–6 (capture) · 25–26 (offline capture) · 28 (indikator) · 31 (i18n) · 123 (PWA) · 143–144 (transport)
+**Kriteria terima (FEATURE-MATRIX):** §A1–6 · §A25–26 · §A28 · §A31 · §B semua baris dengan **Fase = 1**
 
 **Validasi**
 
 ```bash
 cd ~/app/foto-booth
 pnpm lint && pnpm -r typecheck && pnpm -r build
-# unit test state machine + FakeTransport (tanpa kamera)
 pnpm --filter @foto-booth/studio test
 ```
 
-- [ ] Preview tampil < 2 s, resolusi ≥ 1280×720 (diukur dari `videoWidth/videoHeight`, bukan dari mata)
-- [ ] State machine: tiap transisi diuji, termasuk retake 1 frame
+*Otomatis (tanpa hardware — jalan di CI):*
+
+- [ ] Unit test `FakeTransport` dengan **profil capture card** (1080p60, tanpa audio, sinyal bisa diputus) — semua transisi state lulus, termasuk retake 1 frame
+- [ ] Simulasi sinyal hilang: `FakeTransport` stop kirim frame → overlay muncul; sinyal balik → overlay hilang **tanpa reload**
+- [ ] `devicechange` di tengah sesi → app tidak crash, sesi bisa dilanjutkan
+- [ ] Fallback still: jalankan dengan `window.ImageCapture` dihapus → jalur canvas tetap menghasilkan frame
+- [ ] Mirror terukur: profil webcam → `getComputedStyle(video).transform` mengandung `matrix(-1, …)`; profil capture card → `none`
+- [ ] Pilih resolusi: profil fake menawarkan 720p & 1080p → `applyConstraints` benar-benar mengubah `track.getSettings().height`
+
+*Hardware (butuh capture card + kamera):*
+
+- [ ] Kamera → HDMI → capture card **terbaca di dropdown sebagai capture card**, bukan webcam
+- [ ] Preview tampil < 2 s setelah warm-up, resolusi diukur dari `videoWidth/videoHeight` (**bukan dari mata**)
+- [ ] Cabut kabel HDMI di tengah sesi → overlay muncul < 2 s; colok balik → preview balik sendiri
+- [ ] Jepret 6 frame dari capture card → semua tersimpan, **tidak ada frame hitam**
+- [ ] Kamera di-set **manual exposure + clean HDMI (OSD mati)** → hasil tidak flicker / auto-gain naik-turun
+
+*Offline & gate:*
+
 - [ ] **Mode pesawat dari awal → capture tetap jalan, frame tersimpan lokal**
 - [ ] Refresh di tengah sesi → frame tidak hilang (baca ulang IndexedDB)
-- [ ] Ukur DOM: ganti aspect ratio → `getBoundingClientRect()` preview berubah sesuai rasio
 - [ ] CI run hijau + container healthy dengan tag SHA baru
 
-**Gate keluar:** semua task `[x]` · unit test lulus · capture offline terbukti · bukti ditulis.
+> **Penting (operasional):** `getUserMedia` **wajib secure context** — HTTPS atau `localhost`. Jadi kiosk **tidak boleh** diakses lewat `http://192.168.x.x:5050` (kamera tidak akan tersedia sama sekali). Pilih salah satu: **(a)** install PWA dari `https://foto.soyuz.my.id` — origin tetap HTTPS walau offline, jadi kamera tetap jalan; **(b)** browser di host yang sama lewat `localhost`; **(c)** HTTPS lokal dengan sertifikat sendiri.
+
+**Gate keluar:** semua task `[x]` · unit test lulus · capture offline terbukti · **capture card terbukti** (angka resolusi + overlay sinyal hilang) · bukti ditulis.
+
 **Bukti:** —
+
+**Prasyarat hardware:** validasi baris *Hardware* butuh **capture card HDMI + kamera**. Baris *Otomatis* jalan tanpa itu, jadi Fase 1 bisa dikerjakan lebih dulu; yang hardware dicatat sebagai sisa sampai alatnya ada.
 
 ---
 
@@ -182,7 +227,7 @@ pnpm --filter @foto-booth/studio test
 - [ ] Export PNG (dan JPEG) ≥ 300 dpi, nama file rapi
 - [ ] Render di Worker/OffscreenCanvas biar UI tidak nge-freeze
 
-**Kriteria terima (FEATURE-MATRIX):** 7–11 (template) · 85–89
+**Kriteria terima (FEATURE-MATRIX):** §A7–11 (template) · §B semua baris dengan **Fase = 2**
 
 **Validasi**
 
@@ -221,7 +266,7 @@ pnpm --filter @foto-booth/studio test
 - [ ] Cache aset konten (template/frame/sticker/font) untuk offline
 - [ ] Preview print sebelum keluar dialog
 
-**Kriteria terima (FEATURE-MATRIX):** 12–14 (print) · 94–96 · 121 (cache konten offline)
+**Kriteria terima (FEATURE-MATRIX):** §A12–14 (print) · §B semua baris dengan **Fase = 3**
 
 **Validasi**
 
@@ -259,7 +304,7 @@ pnpm lint && pnpm -r typecheck && pnpm -r build
 - [ ] **Kiosk full-offline**: satu device tanpa koneksi → sesi penuh + print tetap utuh
 - [ ] Toggle tombol gallery/print/share (disiapkan, UI lengkap di Fase 9)
 
-**Kriteria terima (FEATURE-MATRIX):** 15–18 (kiosk) · 100–103 · 122 (kiosk full-offline)
+**Kriteria terima (FEATURE-MATRIX):** §A15–18 (kiosk) · §B semua baris dengan **Fase = 4**
 
 **Validasi**
 
@@ -303,7 +348,7 @@ pnpm --filter @foto-booth/studio test
 - [ ] **Tunnel publik `foto.soyuz.my.id`** (`sudo ~/script/add-fotobooth-tunnel.sh`) — tamu harus bisa buka dari HP
 - [ ] Foto disimpan lokal dulu (IndexedDB + OPFS)
 
-**Kriteria terima (FEATURE-MATRIX):** 19–24 (galeri) · 27 (queue+auto-sync) · 30 (kiosk full-offline) · 32–33 (auth, lisensi) · 106–108, 118–120, 136–137
+**Kriteria terima (FEATURE-MATRIX):** §A19–24 (galeri) · §A27 (queue + auto-sync) · §A30 · §A32–33 (auth, lisensi) · §B semua baris dengan **Fase = 5**
 
 **Validasi**
 
@@ -383,7 +428,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
 - [ ] Rate-limit form publik + honeypot (anti spam, karena tanpa login)
 - [ ] Halaman publik responsive + aksesibel (klien buka dari HP)
 
-**Kriteria terima (FEATURE-MATRIX):** baris modul **Booking** (18 baris, Fase 11)
+**Kriteria terima (FEATURE-MATRIX):** §B semua baris dengan **Fase = 11** (modul Booking)
 
 **Validasi**
 

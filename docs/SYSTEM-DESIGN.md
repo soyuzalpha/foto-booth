@@ -93,16 +93,25 @@ idle → armed → countdown → capturing → review → processing → compose
 ### 3.2 Transport abstraction (mengikuti pola SLR Booth)
 ```ts
 interface CameraTransport {
-  readonly kind: 'webcam' | 'usb' | 'network' | 'hdmi';
+  readonly kind: 'uvc' | 'usb' | 'network' | 'webrtc';
   list(): Promise<CameraDevice[]>;
   connect(dev: CameraDevice): Promise<void>;
   liveView(): ReadableStream<VideoFrame>;   // preview stream
   capture(opts: CaptureOptions): Promise<Frame>;
   disconnect(): Promise<void>;
 }
+
+interface CameraDevice {
+  id: string;
+  label: string;
+  source: 'webcam' | 'capture-card';   // klasifikasi, bukan jenis transport
+  capabilities: MediaTrackCapabilities;
+}
 ```
-Implementasi awal: `WebcamTransport` (getUserMedia) + `FakeTransport` (test/CI).
-Fase lanjut: `HdmiTransport` (capture card via getUserMedia), `WebUsbPtpTransport` (DSLR — paling berat), `PtpIpTransport`.
+**Catatan `kind: 'uvc'`:** webcam **dan** capture card HDMI (DSLR/mirrorless) masuk ke sini — dua-duanya device UVC, jadi dua-duanya lewat `getUserMedia`. Bedanya bukan transport, tapi `CameraDevice.source`: itu yang menentukan mirror default, label di dropdown, dan sikap saat sinyal hilang.
+
+Implementasi **Fase 1**: `UvcTransport` (webcam + capture card HDMI) + `FakeTransport` (test/CI — bisa meniru profil capture card: 1080p60, tanpa audio, sinyal bisa diputus) + `DeviceProfile` + `SignalMonitor` + `stillCapture` (`ImageCapture.takePhoto()` dengan fallback canvas).
+Fase lanjut: `WebUsbPtpTransport` (DSLR via WebUSB+PTP — paling berat, Chrome-only), `PtpIpTransport`, `WebRtcPhoneTransport`.
 
 ### 3.3 Filter pipeline
 Urutan tetap, tiap stage opsional:
@@ -274,7 +283,7 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 | Fase | Isi | Hasil |
 |---|---|---|
 | **0** | Scaffold monorepo ramping (pnpm workspace, `shared`), tsconfig, eslint, CI, **service worker + offline shell (PWA)** | `pnpm dev` jalan; app kebuka & jalan tanpa internet |
-| **1** | Webcam capture + countdown + multi-shot + review/retake, **indikator online/offline** | Bisa foto dari webcam, termasuk saat offline |
+| **1** | Capture: **webcam + capture card HDMI (UVC)** + countdown + multi-shot + review/retake, **indikator online/offline** | Bisa foto dari webcam atau DSLR/mirrorless via HDMI, termasuk saat offline |
 | **2** | Template engine + editor Konva + render strip | Bisa bikin & simpan template |
 | **3** | Print layout + print browser + download PNG/JPEG | Foto fisik + file |
 | **4** | Kiosk mode + PIN + idle reset + fullscreen | Bisa unattended |
@@ -324,7 +333,7 @@ Wajib-sama (paritas): semua di §4 RESEARCH.md.
 
 ## 12. Yang perlu diputuskan sebelum ngoding
 
-1. **Kamera dulu:** webcam + HDMI capture card, atau langsung kejar DSLR (WebUSB/PTP)? → saran: webcam dulu.
+1. ~~**Kamera dulu:** webcam + HDMI capture card, atau langsung kejar DSLR (WebUSB/PTP)?~~ **TERJAWAB:** webcam **+ capture card HDMI** di Fase 1 (satu jalur `UvcTransport`, karena capture card = UVC). Kontrol DSLR via WebUSB/PTP tetap di Fase 13.
 2. **Hosting AI lokal:** model (BiRefNet ~50 MB, GFPGAN ~300 MB) di-serve dari mana? CDN sendiri atau bundle?
 3. **Payment:** Midtrans (QRIS + VA, lokal) vs Xendit vs Shopify (internasional)?
 4. **Nama & brand** project (jangan pakai "SLR Booth").

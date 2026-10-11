@@ -128,6 +128,8 @@ Skema starter = JSON lengkap (size + background + frames + textElements + sticke
 
 **Butuh kerja keras / hardware:** kontrol DSLR via USB (**WebUSB + implementasi protokol PTP dari nol**) — ini bagian paling berat; alternatif realistis = fokus webcam + HDMI capture card dulu.
 
+**Keputusan (revisi):** **capture card HDMI dinaikkan ke Fase 1** (satu jalur `UvcTransport` dengan webcam — capture card = device UVC, jadi `getUserMedia` biasa). Yang tetap di Fase 13 hanya **kontrol DSLR via WebUSB/PTP**. Konsekuensi: kiosk **wajib secure context** (HTTPS atau `localhost`) — `getUserMedia` tidak jalan di `http://<IP-LAN>`. Lihat `PHASES.md` Fase 1.
+
 **Legal:** nama, logo, brand, dan 2.000+ aset konten mereka **tidak boleh** dipakai. Clone = arsitektur + fitur; aset & brand harus milik sendiri.
 
 ---
