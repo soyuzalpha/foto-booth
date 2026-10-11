@@ -160,6 +160,7 @@ h1 { font-size: clamp(30px, 5vw, 46px); }
   border: 2px solid var(--ink);
   padding: 2px 9px;
   font-size: 13px; font-weight: 900;
+  white-space: nowrap;
 }
 .badge-ok   { background: var(--lime); }
 .badge-warn { background: var(--yellow); }
