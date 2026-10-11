@@ -31,7 +31,7 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | 18 | Kiosk | Tap to start + wake lock | Layar tidak tidur selama sesi |
 | 19 | Galeri | Buat event + galeri | Event punya nama, tanggal, hashtag |
 | 20 | Galeri | Upload foto (presigned S3, direct) | Upload tidak lewat API, ada progress + retry |
-| 21 | Galeri | Halaman tamu `/album/<hash>` | Buka di HP, browse + download |
+| 21 | Galeri | Halaman tamu `/a/<hash>` | Buka di HP, browse + download (HTML dari API, bukan app terpisah) |
 | 22 | Galeri | QR code ke galeri | Scan QR → langsung ke album |
 | 23 | Galeri | Password galeri (opsional) | Tanpa password benar → 401 |
 | 24 | Galeri | TTL 30 hari + job cleanup | Foto & objek S3 terhapus otomatis |

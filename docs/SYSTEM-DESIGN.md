@@ -13,7 +13,7 @@ Prinsip: **client-first** (capture, edit, render, AI lokal semua di browser) + b
    ────────────────►    │  capture · editor · kiosk · print · AI   │
                         └───────┬──────────────┬───────────────────┘
                                 │              │
-   Tamu (HP)  ──────────►  GALLERY APP (Next.js, SSR + OG image)
+   Tamu (HP)  ──────────►  GALLERY (halaman HTML dari API)
                                 │              │
                         ┌───────▼──────────────▼───────────────────┐
                         │  API  (Fastify + TS + Zod + Drizzle)     │
@@ -31,7 +31,7 @@ Prinsip: **client-first** (capture, edit, render, AI lokal semua di browser) + b
                                         └────────────┘
 ```
 
-**Keputusan kunci:** studio app = **SPA client-heavy** (bukan Next SSR) karena butuh akses device (kamera, WebUSB, WebCodecs, fullscreen) dan harus tetap jalan offline. Marketing + gallery = **Next.js** karena butuh SEO + OG image.
+**Keputusan kunci:** studio app = **SPA client-heavy** (bukan Next SSR) karena butuh akses device (kamera, WebUSB, WebCodecs, fullscreen) dan harus tetap jalan offline. Marketing + gallery **bukan app terpisah**: gallery = halaman server-rendered dari API (butuh OG image, tapi itu cuma meta tag); marketing ditunda sampai mau jualan.
 
 ---
 
@@ -185,6 +185,14 @@ GET    /v1/ai/gemini               # proxy BYOK (stream)
 GET    /health
 ```
 
+**Halaman galeri tamu (HTML, bukan app terpisah)** — di-serve oleh API yang sama:
+
+```
+GET  /a/:hash              # halaman galeri tamu (HTML + meta OG)
+GET  /a/:hash/og.png       # OG image (di-generate server-side dari 1–4 foto)
+GET  /a/:hash/zip          # unduh semua foto
+```
+
 **Upload flow (sama seperti mereka, dan memang paling benar):**
 1. App minta `upload-url` → API kasih **presigned PUT** ke S3.
 2. App upload **langsung ke S3** (tidak lewat API) → progress bar.
@@ -257,7 +265,7 @@ Konsekuensi arsitektur: studio app **tidak boleh** bergantung pada API untuk ren
 - `i18next` + `react-i18next`, locale di `apps/studio/src/locales/*.json` (diangkat ke `packages/i18n` kalau ada app kedua).
 - Mulai **id + en**; struktur siap untuk 19 bahasa seperti mereka.
 - Format tanggal & angka pakai `Intl`.
-- Locale marketing (Next.js) pakai routing `/[locale]/...` + `hreflang`.
+- Locale marketing ditunda bersama app marketing-nya. Kalau nanti dibuat, pakai routing `/[locale]/...` + `hreflang`.
 
 ---
 

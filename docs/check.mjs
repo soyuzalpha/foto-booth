@@ -1,7 +1,9 @@
 import { chromium } from 'playwright';
+import { pathToFileURL } from 'node:url';
+const target = process.argv[2] || new URL('./architecture.html', import.meta.url).pathname;
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1300 } });
-await p.goto('file:///home/cosmic/app/slrbooth-clone/docs/architecture.html', { waitUntil: 'networkidle' });
+await p.goto(pathToFileURL(target).href, { waitUntil: 'networkidle' });
 await p.waitForTimeout(600);
 
 const res = await p.evaluate(() => {
