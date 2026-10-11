@@ -324,7 +324,12 @@ h1 em {
   box-shadow: var(--pop);
   background: var(--white);
   padding: 28px 26px 30px;
+  display: flex; flex-direction: column;
 }
+/* Tombol nempel di dasar kartu, jadi dua kartu harga tetap sejajar walau
+   jumlah poinnya beda. */
+.plan > .btn { margin-top: auto; }
+.plan > .list { margin-bottom: 24px; }
 .plan-main { background: var(--white); box-shadow: var(--pop-lg); }
 .plan-tag {
   display: inline-block;
@@ -337,7 +342,7 @@ h1 em {
 .plan h3 { font-size: 26px; }
 .price { margin: 14px 0 6px; font-size: 40px; font-weight: 900; letter-spacing: -.04em; }
 .price small { font-size: 15px; font-weight: 700; letter-spacing: 0; color: var(--muted); }
-.plan .btn { margin-top: 24px; }
+.plan .btn { margin-top: auto; padding-top: 0; }
 .fine { margin-top: 26px; font-size: 14px; font-weight: 700; }
 
 /* ── FAQ ───────────────────────────────────────────────── */
