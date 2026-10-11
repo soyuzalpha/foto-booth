@@ -42,7 +42,15 @@ export function useStorageStatus(): StorageStatus {
 
     void (async () => {
       try {
-        const persisted = (await navigator.storage.persisted?.()) ?? false;
+        // Minta dulu, baru baca. Tanpa ini browser boleh membuang cache dan
+        // IndexedDB kita saat ruang disk menipis — fatal untuk acara offline.
+        // Chrome biasanya mengabulkan tanpa dialog; Firefox menampilkan prompt.
+        let persisted = (await navigator.storage.persisted?.()) ?? false;
+
+        if (!persisted && navigator.storage.persist !== undefined) {
+          persisted = await navigator.storage.persist();
+        }
+
         const estimate = await navigator.storage.estimate();
 
         if (cancelled) return;
