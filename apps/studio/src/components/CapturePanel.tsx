@@ -54,6 +54,17 @@ function withCurrent(options: readonly number[], current: number): number[] {
 /** State di mana sesi sedang berjalan — pengaturan ditahan supaya tidak berubah di tengah alur. */
 const RUNNING_STATES = new Set(["countdown", "capturing", "processing", "composed"]);
 
+/**
+ * Nilai untuk opsi "belum ada kamera dipilih".
+ *
+ * Sengaja **bukan** string kosong: sebelum izin kamera diberikan, browser
+ * menyembunyikan `deviceId` asli dan memberi string kosong. Kalau placeholder
+ * juga bernilai kosong, memilih kamera itu tidak mengubah apa pun — `onChange`
+ * melihat nilai yang sama dengan placeholder dan mengabaikannya. Itulah kenapa
+ * dropdown terasa "tidak bisa dipilih".
+ */
+const DEVICE_NONE = "__none__";
+
 export default function CapturePanel(): React.JSX.Element {
   const { t } = useTranslation();
   const capture = useCaptureSession();
@@ -172,17 +183,21 @@ export default function CapturePanel(): React.JSX.Element {
           <label className="field">
             <span>{t("capture.device")}</span>
             <select
-              value={deviceId ?? ""}
+              value={deviceId ?? DEVICE_NONE}
               disabled={capture.devices.length === 0}
               onChange={(event) => {
                 const value = event.target.value;
-                if (value !== "") void capture.connect(value);
+                // `""` adalah nilai SAH (device yang belum berizin) — jadi
+                // yang dilewati hanya sentinel placeholder.
+                if (value !== DEVICE_NONE) void capture.connect(value);
               }}
             >
-              <option value="">{t("capture.deviceNone")}</option>
+              <option value={DEVICE_NONE}>{t("capture.deviceNone")}</option>
               {capture.devices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.label} — {deviceBadge(device)}
+                <option key={device.id === "" ? "belum-berizin" : device.id} value={device.id}>
+                  {device.id === ""
+                    ? t("capture.deviceNeedsPermission")
+                    : `${device.label} — ${deviceBadge(device)}`}
                 </option>
               ))}
             </select>

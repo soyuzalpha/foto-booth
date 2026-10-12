@@ -28,6 +28,7 @@
     "title": "Sesi foto",
     "device": "Kamera",
     "deviceNone": "— pilih kamera —",
+    "deviceNeedsPermission": "Kamera — klik untuk mengizinkan",
     "scan": "Pindai ulang",
     "disconnect": "Lepas",
     "aspect": "Rasio",

@@ -273,11 +273,23 @@ export class CaptureSession {
     this.attachEndedListener();
     this.startSignalMonitor();
 
+    // Sebelum izin diberikan, UI hanya punya id kosong — `currentDevice()`
+    // memegang id asli yang baru saja dibuka track-nya. Tanpa langkah ini
+    // `snapshot.deviceId` tetap `""`: dropdown tidak punya opsi yang cocok,
+    // jadi tampil seolah tidak ada device yang terpilih.
+    const resolvedId = this.transport.currentDevice?.()?.id ?? deviceId;
+    if (resolvedId !== deviceId) {
+      this.dispatch({ type: "device", deviceId: resolvedId });
+      // Izin baru diberikan → label device baru muncul. Segarkan daftar supaya
+      // operator melihat nama kamera aslinya, bukan "izin belum diberikan".
+      await this.refreshDevices();
+    }
+
     // Override mirror itu keputusan **per device**, bukan preferensi global.
     // Kalau dibiarkan menempel, operator yang menyalakan mirror di webcam akan
     // membawa setting itu ke capture card — dan justru di situlah mirror mati
     // itu wajib. Foto tamu jadi kebalik tanpa ada yang sadar.
-    if (this.mirrorOverrideDevice !== null && this.mirrorOverrideDevice !== deviceId) {
+    if (this.mirrorOverrideDevice !== null && this.mirrorOverrideDevice !== resolvedId) {
       this.mirrorOverride = null;
       this.mirrorOverrideDevice = null;
     }

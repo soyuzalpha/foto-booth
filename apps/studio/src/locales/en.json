@@ -28,6 +28,7 @@
     "title": "Photo session",
     "device": "Camera",
     "deviceNone": "— pick a camera —",
+    "deviceNeedsPermission": "Camera — click to allow",
     "scan": "Rescan",
     "disconnect": "Disconnect",
     "aspect": "Aspect",

@@ -13,6 +13,7 @@
 
 import { describeDevice } from "./deviceProfile.ts";
 import { captureError, mapMediaError, preflight } from "./errors.ts";
+import type { CaptureError } from "./errors.ts";
 import { createLumaSampler } from "./lumaSampler.ts";
 import { captureStill, waitForVideoReady } from "./stillCapture.ts";
 import type { LumaGrid } from "./signalMonitor.ts";
@@ -32,6 +33,13 @@ export interface UvcTransportDeps {
   createVideo?: () => HTMLVideoElement;
   now?: () => number;
   newId?: () => string;
+  /**
+   * Cek lingkungan sebelum menyentuh `getUserMedia`.
+   *
+   * Disuntik supaya jalur "HTTP, bukan localhost" bisa diuji di Node —
+   * `preflight()` aslinya menyentuh `navigator`, yang tidak ada di sana.
+   */
+  preflight?: () => CaptureError | null;
 }
 
 function defaultVideo(): HTMLVideoElement {
@@ -66,6 +74,7 @@ export class UvcTransport implements CameraTransport {
       createVideo: deps.createVideo ?? defaultVideo,
       now: deps.now ?? (() => Date.now()),
       newId: deps.newId ?? defaultId,
+      preflight: deps.preflight ?? preflight,
     };
   }
 
@@ -81,22 +90,40 @@ export class UvcTransport implements CameraTransport {
   async list(): Promise<CameraDevice[]> {
     const devices = await this.deps.mediaDevices.enumerateDevices();
 
-    return devices
-      .filter((device) => device.kind === "videoinput")
+    const videoInputs = devices.filter((device) => device.kind === "videoinput");
+
+    // Sebelum izin kamera diberikan, browser memberi `deviceId` **kosong** untuk
+    // setiap kamera. Tidak ada cara membedakannya satu sama lain, dan semuanya
+    // akan terbuka lewat `getUserMedia` yang sama. Kalau tetap ditampilkan
+    // terpisah, dropdown berisi beberapa baris identik ber-`value` kosong —
+    // dan React pun mengeluh karena `key`-nya kembar. Jadi digabung satu.
+    const unlabeled = videoInputs.filter((device) => device.deviceId === "").length;
+
+    const listed = videoInputs
+      .filter((device) => device.deviceId !== "")
       .map((device) => describeDevice(device.deviceId, device.label));
+
+    if (unlabeled > 0) listed.unshift(describeDevice("", ""));
+
+    return listed;
   }
 
   async connect(deviceId: string, options: CaptureOptions = {}): Promise<void> {
     // Konteks tidak aman / browser tidak dukung — lebih baik gagal dengan
     // pesan yang bisa ditindaklanjuti daripada `getUserMedia` yang membingungkan.
-    const blocked = preflight();
+    const blocked = this.deps.preflight();
     if (blocked !== null) throw blocked;
 
     await this.disconnect();
 
     const constraints: MediaStreamConstraints = {
       video: {
-        deviceId: { exact: deviceId },
+        // `deviceId` kosong = origin belum punya izin kamera, jadi browser
+        // sengaja tidak membocorkan id asli (`enumerateDevices()` memberi
+        // string kosong). Memaksa `{ exact: "" }` di sini pasti gagal — yang
+        // benar: biarkan browser memilih device default, dan panggilan inilah
+        // yang memunculkan prompt izin. Setelah izin, id asli dibaca dari track.
+        ...(deviceId === "" ? {} : { deviceId: { exact: deviceId } }),
         ...(options.width !== undefined ? { width: { ideal: options.width } } : {}),
         ...(options.height !== undefined ? { height: { ideal: options.height } } : {}),
         ...(options.frameRate !== undefined ? { frameRate: { ideal: options.frameRate } } : {}),
@@ -141,9 +168,18 @@ export class UvcTransport implements CameraTransport {
     }
 
     const devices = await this.list();
-    const found = devices.find((candidate) => candidate.id === deviceId);
+
+    // Izin kamera baru diberikan pada `getUserMedia` di atas, dan justru pada
+    // panggilan pertama `deviceId` yang dikirim UI masih kosong. Id asli harus
+    // dibaca dari track yang benar-benar terbuka — kalau tidak, `currentDevice()`
+    // terus melaporkan id kosong dan UI tidak pernah menempel ke device nyata.
+    const settings = typeof track.getSettings === "function" ? track.getSettings() : null;
+    const resolvedId =
+      settings?.deviceId !== undefined && settings.deviceId !== "" ? settings.deviceId : deviceId;
+
+    const found = devices.find((candidate) => candidate.id === resolvedId);
     const rawLabel = devices.length === 0 ? "" : (found?.label ?? "");
-    this.device = describeDevice(deviceId, rawLabel);
+    this.device = describeDevice(resolvedId, rawLabel);
   }
 
   stream(): MediaStream | null {

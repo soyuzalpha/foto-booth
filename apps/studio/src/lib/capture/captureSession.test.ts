@@ -153,6 +153,70 @@ interface Harness {
   settle(steps?: number): Promise<void>;
 }
 
+/**
+ * Meniru transport nyata saat izin kamera **belum** diberikan.
+ *
+ * UI hanya punya `deviceId` kosong, jadi ia memanggil `connect("")`. Transport
+ * lalu membuka kamera default dan melaporkan id **asli** lewat `currentDevice()`.
+ * Itu persis yang dilakukan `UvcTransport` (id dibaca dari track setelah izin),
+ * dan justru perilaku inilah yang dulu tidak pernah sampai ke snapshot sesi.
+ */
+class ResolvingTransport implements CameraTransport {
+  readonly kind = "uvc" as const;
+
+  private readonly inner: FakeTransport;
+  private readonly realId: string;
+
+  constructor(inner: FakeTransport, realId: string) {
+    this.inner = inner;
+    this.realId = realId;
+  }
+
+  list(): Promise<CameraDevice[]> {
+    return this.inner.list();
+  }
+
+  connect(deviceId: string, options?: CaptureOptions): Promise<void> {
+    return this.inner.connect(deviceId === "" ? this.realId : deviceId, options);
+  }
+
+  currentDevice(): CameraDevice | null {
+    return this.inner.currentDevice();
+  }
+
+  stream(): MediaStream | null {
+    return this.inner.stream();
+  }
+
+  track(): MediaStreamTrack | null {
+    return this.inner.track();
+  }
+
+  capture(shotIndex: number): Promise<Frame> {
+    return this.inner.capture(shotIndex);
+  }
+
+  applyOptions(options: CaptureOptions): Promise<void> {
+    return this.inner.applyOptions(options);
+  }
+
+  disconnect(): Promise<void> {
+    return this.inner.disconnect();
+  }
+
+  waitReady(): Promise<boolean> {
+    return this.inner.waitReady();
+  }
+
+  lumaSampler(): (() => LumaGrid | null) | null {
+    return this.inner.lumaSampler();
+  }
+
+  onEnded(listener: (deviceId: string | null) => void): () => void {
+    return this.inner.onEnded(listener);
+  }
+}
+
 function harness(options: {
   spec?: typeof FAKE_WEBCAM;
   /** Beberapa device sekaligus — untuk menguji perpindahan device. */
@@ -162,6 +226,8 @@ function harness(options: {
   intervalMs?: number;
   reviewMs?: number;
   blocked?: boolean;
+  /** Bungkus transport supaya `connect("")` meniru jalur izin-kamera. */
+  resolveEmptyId?: boolean;
 } = {}): Harness {
   const specs = options.specs ?? [options.spec ?? FAKE_WEBCAM];
   const clock = createFakeClock(1_000);
@@ -180,10 +246,17 @@ function harness(options: {
   const store = new MemoryFrameStore();
   const mediaDevices = new FakeMediaDevices();
 
+  // Transport yang dipakai sesi. Default `flaky` (bisa dipaksa gagal jepret);
+  // jalur izin-kamera memakai pembungkus yang melaporkan id asli.
+  const wired: CameraTransport =
+    options.resolveEmptyId === true
+      ? new ResolvingTransport(transport, specs[0]?.id ?? "")
+      : flaky;
+
   let idCounter = 0;
 
   const session = new CaptureSession({
-    transport: flaky,
+    transport: wired,
     store,
     mediaDevices: mediaDevices as unknown as MediaDevices,
     now: clock.now,
@@ -251,6 +324,34 @@ test("connect menyiapkan device, daftar device, dan listener devicechange", asyn
   assert.equal(h.session.devices.length, 1);
   assert.equal(h.session.devices[0]?.source, "webcam");
   assert.deepEqual(h.errors, [], "tanpa peringatan warm-up untuk webcam");
+});
+
+test("connect dengan id kosong menempelkan id asli yang dilaporkan transport", async () => {
+  // Skenario lapangan: izin kamera belum diberikan, jadi dropdown hanya punya
+  // opsi ber-`value` kosong. Operator memilihnya, UI memanggil `connect("")`,
+  // dan transport membuka kamera default lalu melaporkan id aslinya.
+  const h = harness({ resolveEmptyId: true });
+  await h.session.init();
+
+  await h.session.connect("");
+
+  // Dulu snapshot tetap `""` → dropdown tidak punya opsi yang cocok, jadi
+  // tampil seolah tidak ada kamera yang terpilih walau gambarnya sudah jalan.
+  assert.equal(h.session.getSnapshot().deviceId, FAKE_WEBCAM.id);
+  assert.equal(h.errors.length, 0);
+});
+
+test("setelah izin diberikan, daftar device menampilkan nama aslinya", async () => {
+  const h = harness({ resolveEmptyId: true });
+  await h.session.init();
+
+  await h.session.connect("");
+
+  // Id berubah dari "" jadi id asli → daftar ikut disegarkan supaya operator
+  // melihat nama kamera, bukan label "izin belum diberikan".
+  assert.equal(h.session.devices.length, 1);
+  assert.equal(h.session.devices[0]?.id, FAKE_WEBCAM.id);
+  assert.equal(h.session.devices[0]?.label, FAKE_WEBCAM.label);
 });
 
 test("capture card default tidak di-mirror, webcam di-mirror", async () => {

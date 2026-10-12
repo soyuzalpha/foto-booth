@@ -131,7 +131,15 @@ export function describeDevice(
           confidence: "override" as const,
         };
 
-  const label = rawLabel.trim() === "" ? `Kamera ${id.slice(0, 6)}` : rawLabel.trim();
+  // Label kosong = izin belum diberikan. Jangan biarkan jadi "Kamera " dengan
+  // ekor menggantung — operator harus tahu kenapa namanya belum muncul.
+  const trimmed = rawLabel.trim();
+  const label =
+    trimmed !== ""
+      ? trimmed
+      : id === ""
+        ? "Kamera (izin belum diberikan)"
+        : `Kamera ${id.slice(0, 6)}`;
 
   return { id, label, source: classification.source, classification };
 }
