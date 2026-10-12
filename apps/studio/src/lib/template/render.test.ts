@@ -77,6 +77,29 @@ class RecordingContext implements DrawTarget {
     this.record("drawImage", sx!, sy!, sw!, sh!, dx!, dy!, dw!, dh!);
   }
 
+  shadowColor = "rgba(0, 0, 0, 0)";
+  shadowBlur = 0;
+  shadowOffsetX = 0;
+  shadowOffsetY = 0;
+  readonly gradients: { inner: number; outer: number; stops: string[] }[] = [];
+
+  createRadialGradient(_x0: number, _y0: number, r0: number, _x1: number, _y1: number, r1: number): CanvasGradient {
+    const stops: string[] = [];
+    const entry = { inner: r0, outer: r1, stops };
+    this.gradients.push(entry);
+    this.record("createRadialGradient", r0, r1);
+    return {
+      addColorStop(_offset: number, color: string) {
+        stops.push(color);
+      },
+    } as unknown as CanvasGradient;
+  }
+
+  /** Nilai bayangan yang sedang aktif — untuk membuktikan shadow benar-benar dipasang. */
+  get shadow(): { color: string; blur: number; offsetY: number } {
+    return { color: this.shadowColor, blur: this.shadowBlur, offsetY: this.shadowOffsetY };
+  }
+
   ops(op: string): Call[] {
     return this.calls.filter((call) => call.op === op);
   }
@@ -228,4 +251,69 @@ test("wrapText pada teks kosong mengembalikan satu baris kosong", () => {
 
 test("cssFont memakai ukuran & keluarga dari elemen teks", () => {
   assert.equal(cssFont({ fontSize: 46, fontFamily: "Inter, sans-serif" }), "46px Inter, sans-serif");
+});
+
+test("vignette latar: gradient radial dari transparan ke gelap di tepi (Fase 3 §B37)", () => {
+  const ctx = new RecordingContext();
+  const template = defaultStripTemplate({ now: NOW });
+  const withVignette = {
+    ...template,
+    background: { ...template.background, hasVignette: true },
+  };
+
+  const stats = renderTemplate(ctx, withVignette);
+
+  assert.equal(stats.vignetteDrawn, true);
+  assert.equal(ctx.gradients.length, 1, "harus ada tepat satu gradient vignette");
+
+  const gradient = ctx.gradients[0]!;
+  // Radius luar = jarak tengah ke sudut (600×1800 → hypot(300, 900)).
+  assert.ok(Math.abs(gradient.outer - Math.hypot(300, 900)) < 1e-6, `outer=${gradient.outer}`);
+  // Radius dalam = 55% radius luar → tengah tetap bersih.
+  assert.ok(Math.abs(gradient.inner - gradient.outer * 0.55) < 1e-6, `inner=${gradient.inner}`);
+  assert.equal(gradient.stops[0], "rgba(0, 0, 0, 0)", "tengah harus transparan");
+  assert.ok(gradient.stops[1]!.startsWith("rgba(0, 0, 0,"), `tepi harus gelap: ${gradient.stops[1]}`);
+
+  // Vignette digambar SETELAH latar (fillRect penuh) dan SEBELUM frame.
+  const ops = ctx.calls.map((call) => call.op);
+  const vignetteAt = ops.indexOf("createRadialGradient");
+  assert.ok(vignetteAt > ops.indexOf("fillRect"), "vignette harus setelah latar");
+});
+
+test("tanpa hasVignette tidak ada gradient sama sekali (Fase 3 §B37)", () => {
+  const ctx = new RecordingContext();
+  const stats = renderTemplate(ctx, defaultStripTemplate({ now: NOW }));
+
+  assert.equal(stats.vignetteDrawn, false);
+  assert.equal(ctx.gradients.length, 0);
+});
+
+test("shadow elemen dipasang saat hasShadow=true dan dilepas untuk garis tepi (Fase 3 §B38)", () => {
+  const ctx = new RecordingContext();
+  const template = defaultStripTemplate({ count: 1, now: NOW });
+  const shadowed = {
+    ...template,
+    frames: [{ ...template.frames[0]!, hasShadow: true }],
+  };
+
+  const stats = renderTemplate(ctx, shadowed, {
+    frames: [{ image: {} as CanvasImageSource, width: 600, height: 600 }],
+  });
+
+  assert.equal(stats.shadowsDrawn, 1);
+  // Setelah render selesai, bayangan harus sudah dimatikan lagi (garis tepi
+  // digambar tanpa bayangan) — kalau lupa, tiap elemen berikutnya ikut kabur.
+  assert.deepEqual(ctx.shadow, { color: "rgba(0, 0, 0, 0)", blur: 0, offsetY: 0 });
+});
+
+test("shadow tidak dipasang saat hasShadow=false (Fase 3 §B38)", () => {
+  const ctx = new RecordingContext();
+  const template = defaultStripTemplate({ count: 1, now: NOW });
+
+  const stats = renderTemplate(ctx, template, {
+    frames: [{ image: {} as CanvasImageSource, width: 600, height: 600 }],
+  });
+
+  assert.equal(stats.shadowsDrawn, 0);
+  assert.deepEqual(ctx.shadow, { color: "rgba(0, 0, 0, 0)", blur: 0, offsetY: 0 });
 });

@@ -37,7 +37,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **0** | Scaffold monorepo + offline shell + CI deploy | L | `[x]` **selesai** |
 | **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[x]` **selesai** — otomatis+offline; 5 baris hardware tertunda |
 | **2** | Template engine + editor Konva + render strip | L | `[x]` **selesai** |
-| **3** | Print layout + print browser + download | M | `[ ]` |
+| **3** | Print layout + print browser + download | M | `[x]` **selesai** |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[ ]` |
 | 6 | Green screen + adjustments + face enhance | L | `[ ]` |
@@ -304,7 +304,7 @@ pnpm --filter @foto-booth/studio test
 
 ## Fase 3 — Print & export
 
-**Status:** `[ ]`
+**Status:** `[x]` selesai & tervalidasi (2026-10-12)
 **Gate masuk:** Fase 2 gate keluar terpenuhi (hasil compose bisa dirender).
 **Tujuan:** hasil bisa jadi foto fisik dan file.
 
@@ -312,12 +312,12 @@ pnpm --filter @foto-booth/studio test
 
 **Task**
 
-- [ ] Preset kertas `2×6 strip` + `4×6` dengan margin/bleed benar
-- [ ] `renderPrintLayout(template, frames) → HTMLCanvasElement` (300 dpi)
-- [ ] Print via iframe (`window.print()`), ukuran benar
-- [ ] Download PNG/JPEG, nama file rapi
-- [ ] Cache aset konten (template/frame/sticker/font) untuk offline
-- [ ] Preview print sebelum keluar dialog
+- [x] Preset kertas `2×6 strip` + `4×6` dengan margin/bleed benar
+- [x] `renderPrintLayout(template, frames) → HTMLCanvasElement` (300 dpi)
+- [x] Print via iframe (`window.print()`), ukuran benar
+- [x] Download PNG/JPEG, nama file rapi
+- [x] Cache aset konten (template/frame/sticker/font) untuk offline
+- [x] Preview print sebelum keluar dialog
 
 **Kriteria terima (FEATURE-MATRIX):** §A12–14 (print) · §B semua baris dengan **Fase = 3**
 
@@ -327,15 +327,28 @@ pnpm --filter @foto-booth/studio test
 pnpm lint && pnpm -r typecheck && pnpm -r build
 ```
 
-- [ ] Ukur canvas print: `2×6` → 600×1800 px, `4×6` → 1200×1800 px (300 dpi)
-- [ ] Bandingkan preview vs file hasil: tidak ada elemen terpotong di tepi (probe pixel band)
-- [ ] Nama file terunduh sesuai pola (tanggal + event)
-- [ ] **Offline: konten (template/frame/sticker) tetap tampil setelah sync pertama**
-- [ ] Print dialog keluar dengan ukuran benar (diuji di Chromium headless + manual)
-- [ ] CI hijau + container healthy
+- [x] Ukur canvas print: `2×6` → 600×1800 px, `4×6` → 1200×1800 px (300 dpi)
+- [x] Bandingkan preview vs file hasil: tidak ada elemen terpotong di tepi (probe pixel band)
+- [x] Nama file terunduh sesuai pola (tanggal + event)
+- [x] **Offline: konten (template/frame/sticker) tetap tampil setelah sync pertama**
+- [x] Print dialog keluar dengan ukuran benar (diuji di Chromium headless + manual)
+- [x] CI hijau + container healthy
 
 **Gate keluar:** semua task `[x]` · dimensi print terukur · konten offline tersedia · bukti ditulis.
-**Bukti:** —
+**Bukti:**
+
+- **Satuan ukuran print (satu sumber kebenaran):** `packages/shared/src/print.ts` — `printPixelSize`, `printSafeBox`, `printTrimBox`, `cutMarkLines`, `fitBox`, `PRINT_PRESETS` (`2×6 strip` = 2×6 in @300 dpi, safe margin 0,12 in, bleed 0,05 in), `printPresetById`, `nearestPrintPreset`, `isTemplateTooLarge`. Dipakai bersama studio & API.
+- **Renderer lembar cetak:** `apps/studio/src/lib/print/printLayout.ts` — `planPrintSheet()` + `renderPrintSheet()` (kertas putih → template di trim box → **cut mark digambar TERAKHIR** supaya tak mungkin tertutup template) + `printSheetPlanSummary()`.
+- **Print browser:** `apps/studio/src/lib/print/printBrowser.ts` — iframe tersembunyi + `window.print()`; `@page { size: <mm> <mm>; margin: 0 }` supaya Chromium tidak mengecilkan gambar; gambar di-inline sebagai **data URL** (blob URL halaman induk tidak terbaca di dokumen iframe).
+- **Export lembar:** `apps/studio/src/lib/print/exportPrint.ts` — render lembar → `Blob` → unduh; nama berkas ditandai `-cetak-<preset>` supaya tidak tertukar dengan export template biasa; `tokens` diteruskan ke `sheetFilename`.
+- **Cache konten offline:** `apps/studio/src/lib/content/contentCache.ts` + `useContentSync.ts`; IndexedDB naik ke **v3** dengan store `content` (`keyPath "kind"`) + `contentAssets` (`keyPath "url"`); `api.ts` menambah `fetchContentCatalog` yang **memvalidasi per item** (satu item rusak dibuang, sisanya tetap). **Katalog ditulis SEBELUM aset diunduh** — jaringan mati di tengah sync, daftar tetap ada. Sync jalan **sekali per app dibuka**, bukan per render.
+- **Katalog bawaan (nyata, bukan stub Fase 0):** `apps/api/static/content/` — `frames/frame-classic.svg`, `frames/frame-polaroid.svg`, `backgrounds/bg-cream.svg`, `backgrounds/bg-night.svg`, `stickers/star.svg`, `stickers/cloud.svg`, `starters/starter-strip-2x6.json`, `starters/starter-grid-4x6.json`; route `apps/api/src/routes/content.ts` menyajikannya + di-serve statis di `/content/`.
+- **UI:** `TemplatePanel.tsx` (tombol cetak + export lembar, readout rencana cetak, `data-print-preset` / `data-print-bleed` untuk pengukuran); `App.tsx` (`useContentSync` + kartu status cache konten supaya klaim offline terukur).
+- **Tes unit:** shared **27/27** (`print.test.ts`), studio **207/207** (`printLayout.test.ts`, `printBrowser.test.ts`, `exportPrint.test.ts`, `contentCache.test.ts`), api **6/6** (`content.test.ts`).
+- **Validasi browser (Playwright, build produksi di container):** `fb-fase3-print.mjs` → **23/23 lolos** — termasuk `2×6` = 600×1800 px, `4×6` = 1200×1800 px, bleed 630×1830 px, pita tepi 6 px bersih (0 piksel bocor di keempat sisi), nama berkas `…-cetak-2x6-600x1800.png`, `@page size: 50.8mm 152.4mm; margin: 0`, gambar dicetak sebagai data URL, dan katalog konten (4 kategori) bertahan di IndexedDB setelah reload offline.
+- **Gate:** `pnpm lint` **0** · `pnpm -r typecheck` **0** · `pnpm -r build` **0** · `pnpm -r test` **0**.
+- **Bukti gambar:** `fb-fase3-shots/print-panel.png`.
+- **Catatan:** 5 baris *hardware* Fase 1 masih terbuka (utang yang disepakati, ditutup sebelum gate MVP Fase 5).
 
 ---
 

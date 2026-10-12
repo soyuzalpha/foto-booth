@@ -1,4 +1,12 @@
-import { API_PREFIX, APP_VERSION } from "@foto-booth/shared";
+import {
+  API_PREFIX,
+  APP_VERSION,
+  CONTENT_KINDS,
+  ContentItemSchema,
+  isContentKind,
+  type ContentItem,
+  type ContentKind,
+} from "@foto-booth/shared";
 
 export interface HealthResponse {
   status: string;
@@ -40,3 +48,56 @@ export async function fetchHealth(): Promise<HealthResponse | null> {
     clearTimeout(timer);
   }
 }
+
+/**
+ * Katalog konten satu kategori.
+ *
+ * Respons divalidasi per-item: satu item rusak **dibuang**, sisanya tetap
+ * dipakai. Kalau seluruh respons tidak berbentuk seperti yang diharapkan,
+ * hasilnya daftar kosong — bukan throw. Pemanggil (sync offline) yang
+ * memutuskan apa artinya "kosong".
+ */
+export async function fetchContentCatalog(kind: ContentKind): Promise<ContentItem[]> {
+  const res = await fetch(`${API_PREFIX}/content/${kind}`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(`Katalog konten gagal dimuat: HTTP ${res.status}`);
+
+  const data = (await res.json()) as { items?: unknown };
+  if (!Array.isArray(data.items)) return [];
+
+  const items: ContentItem[] = [];
+  for (const raw of data.items) {
+    const parsed = ContentItemSchema.safeParse(raw);
+    if (parsed.success && parsed.data.kind === kind) items.push(parsed.data);
+  }
+  return items;
+}
+
+/** Biner satu aset konten; `null` kalau gagal (bukan throw). */
+export async function fetchContentAsset(url: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return null;
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
+/** Fetcher siap pakai untuk `syncContent` — satu putaran untuk semua kategori. */
+export function browserContentFetchers(): {
+  catalog: (kind: ContentKind) => Promise<ContentItem[]>;
+  asset: (url: string) => Promise<Blob | null>;
+} {
+  return { catalog: fetchContentCatalog, asset: fetchContentAsset };
+}
+
+/** Semua kategori konten, urut sesuai `CONTENT_KINDS`. */
+export function allContentKinds(): readonly ContentKind[] {
+  return CONTENT_KINDS;
+}
+
+export { isContentKind };

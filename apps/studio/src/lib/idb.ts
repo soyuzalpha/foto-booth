@@ -12,10 +12,14 @@
  */
 
 export const DB_NAME = "foto-booth";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORE_FRAMES = "frames";
 export const STORE_TEMPLATES = "templates";
+/** Katalog konten dari API (starters/frames/backgrounds/stickers). */
+export const STORE_CONTENT = "content";
+/** Biner aset konten, dikunci per URL — ini yang bikin konten tampil offline. */
+export const STORE_CONTENT_ASSETS = "contentAssets";
 
 const INDEX_FRAME_SESSION = "sessionId";
 
@@ -40,6 +44,14 @@ function upgrade(db: IDBDatabase): void {
 
   if (!db.objectStoreNames.contains(STORE_TEMPLATES)) {
     db.createObjectStore(STORE_TEMPLATES, { keyPath: "id" });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_CONTENT)) {
+    db.createObjectStore(STORE_CONTENT, { keyPath: "kind" });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_CONTENT_ASSETS)) {
+    db.createObjectStore(STORE_CONTENT_ASSETS, { keyPath: "url" });
   }
 }
 

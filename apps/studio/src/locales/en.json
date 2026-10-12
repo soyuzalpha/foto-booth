@@ -22,7 +22,14 @@
     "storageUsage": "{{used}} used of {{quota}}",
     "storageUnavailable": "Not available in this browser",
     "version": "Version",
-    "checking": "Checking…"
+    "checking": "Checking…",
+    "contentCache": "Offline content",
+    "contentCacheState": "Status",
+    "contentCacheReady": "Ready offline",
+    "contentCacheOffline": "Not synced yet",
+    "contentCacheIdle": "Waiting",
+    "contentCacheAssets": "Cached assets",
+    "contentCacheNote": "{{kinds}} content categories stored on this device."
   },
   "capture": {
     "title": "Photo session",
@@ -117,7 +124,22 @@
     "fontSize": "Font size",
     "color": "Color",
     "renderPath": "Render path: {{path}}",
-    "canvasHint": "Canvas {{width}}×{{height}} px (full print resolution)."
+    "canvasHint": "Canvas {{width}}×{{height}} px (full print resolution).",
+    "print": "Print",
+    "printPaper": "Paper",
+    "printBleed": "Bleed",
+    "printBleedHint": "Add 0.05 in on every side + cut marks (when the preset supports it).",
+    "printNow": "Print now",
+    "printDownload": "Download sheet",
+    "printPreview": "Print sheet preview",
+    "printPlan": "Sheet {{sheet}} · template {{template}} · scale {{scale}}",
+    "printLast": "Last sheet: {{filename}} — {{width}}×{{height}} px",
+    "starters": "Built-in templates",
+    "vignette": "Background vignette",
+    "vignetteHint": "Darken the background edges so the eye goes to the middle",
+    "frameShadow": "Frame shadow",
+    "frameShadowHint": "Add a shadow to the selected frame",
+    "printError": "Could not prepare the print sheet: {{message}}"
   },
   "footer": {
     "note": "Buy once, not a subscription.",

@@ -51,6 +51,18 @@ export interface DrawTarget {
   font: string;
   textAlign: CanvasTextAlign;
   textBaseline: CanvasTextBaseline;
+  shadowColor: string;
+  shadowBlur: number;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  createRadialGradient(
+    x0: number,
+    y0: number,
+    r0: number,
+    x1: number,
+    y1: number,
+    r1: number,
+  ): CanvasGradient;
 }
 
 /** Gambar siap-gambar + ukuran aslinya (biar crop tidak butuh DOM). */
@@ -76,11 +88,59 @@ export interface RenderStats {
   framesDrawn: number;
   textsDrawn: number;
   stickersDrawn: number;
+  /** Berapa elemen yang benar-benar digambar dengan bayangan. */
+  shadowsDrawn: number;
+  /** `true` kalau vignette latar benar-benar digambar. */
+  vignetteDrawn: boolean;
   /** Teks setelah token disubstitusi — bukti bahwa token benar-benar jalan. */
   renderedTexts: string[];
 }
 
 const LINE_HEIGHT_RATIO = 1.2;
+
+/**
+ * Vignette latar: transparan di tengah, makin gelap ke tepi.
+ * Radius dalam 55% dari jari-jari sudut supaya bagian tengah tetap bersih,
+ * dan gradient ditutup di `hypot(cx, cy)` supaya keempat sudut ikut tergelapkan.
+ */
+const VIGNETTE_INNER_RATIO = 0.55;
+const VIGNETTE_EDGE_ALPHA = 0.55;
+
+/** Bayangan elemen (Fase 3). Offset tegak saja supaya terlihat seperti benda di atas kertas. */
+const SHADOW_COLOR = "rgba(0, 0, 0, 0.45)";
+const SHADOW_BLUR = 24;
+const SHADOW_OFFSET_X = 0;
+const SHADOW_OFFSET_Y = 8;
+
+function drawVignette(ctx: DrawTarget, width: number, height: number): void {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const outerRadius = Math.hypot(centerX, centerY);
+  if (outerRadius <= 0) return;
+
+  const gradient = ctx.createRadialGradient(
+    centerX,
+    centerY,
+    outerRadius * VIGNETTE_INNER_RATIO,
+    centerX,
+    centerY,
+    outerRadius,
+  );
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+  gradient.addColorStop(1, `rgba(0, 0, 0, ${VIGNETTE_EDGE_ALPHA})`);
+
+  ctx.save();
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+function applyShadow(ctx: DrawTarget, hasShadow: boolean): void {
+  ctx.shadowColor = hasShadow ? SHADOW_COLOR : "rgba(0, 0, 0, 0)";
+  ctx.shadowBlur = hasShadow ? SHADOW_BLUR : 0;
+  ctx.shadowOffsetX = hasShadow ? SHADOW_OFFSET_X : 0;
+  ctx.shadowOffsetY = hasShadow ? SHADOW_OFFSET_Y : 0;
+}
 
 /** Font CSS dari elemen teks. Dipakai juga oleh editor supaya tidak beda. */
 export function cssFont(text: Pick<TemplateText, "fontSize" | "fontFamily">): string {
@@ -132,6 +192,8 @@ function drawFrame(
   const centerY = frame.y + frame.height / 2;
 
   drawRotated(ctx, centerX, centerY, frame.rotation, () => {
+    applyShadow(ctx, frame.hasShadow);
+
     // Latar slot kosong supaya tata letak tetap terbaca sebelum ada foto.
     if (image === null || image === undefined) {
       ctx.fillStyle = "#e8e5da";
@@ -150,6 +212,9 @@ function drawFrame(
         frame.height,
       );
     }
+
+    // Garis tepi digambar tanpa bayangan: kalau tidak, garis tipis jadi dobel kabur.
+    applyShadow(ctx, false);
 
     if (frame.borderThickness > 0) {
       ctx.strokeStyle = frame.borderColor;
@@ -259,10 +324,17 @@ export function renderTemplate(
   }
 
   let framesDrawn = 0;
+  let shadowsDrawn = 0;
   for (const frame of template.frames) {
     const image = options.frames?.[frame.slot] ?? null;
     if (drawFrame(ctx, frame, image)) framesDrawn += 1;
+    if (frame.hasShadow) shadowsDrawn += 1;
   }
+
+  // Vignette digambar SETELAH latar tapi SEBELUM elemen, supaya foto tetap tajam
+  // dan hanya latar yang tergelapkan.
+  const vignetteDrawn = template.background.hasVignette;
+  if (vignetteDrawn) drawVignette(ctx, pixels.width, pixels.height);
 
   let stickersDrawn = 0;
   for (const sticker of template.stickers) {
@@ -282,6 +354,8 @@ export function renderTemplate(
     framesDrawn,
     textsDrawn: renderedTexts.length,
     stickersDrawn,
+    shadowsDrawn,
+    vignetteDrawn,
     renderedTexts,
   };
 }

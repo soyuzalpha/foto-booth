@@ -59,6 +59,22 @@ export default defineConfig({
       "/v1": "http://127.0.0.1:5050",
       "/health": "http://127.0.0.1:5050",
       "/version": "http://127.0.0.1:5050",
+      // Katalog konten yang dibundel — dipakai sync offline. Tanpa ini,
+      // aset tidak bisa di-cache saat dev/preview.
+      "/content": "http://127.0.0.1:5050",
+    },
+  },
+
+  // `vite preview` memakai blok `preview`, bukan `server`. Validasi Fase 3
+  // (offline & print) jalan di produksi build, jadi proxy-nya harus ada di sini
+  // juga — kalau tidak, sync konten selalu gagal di `:5174`.
+  preview: {
+    port: 5174,
+    proxy: {
+      "/v1": "http://127.0.0.1:5050",
+      "/health": "http://127.0.0.1:5050",
+      "/version": "http://127.0.0.1:5050",
+      "/content": "http://127.0.0.1:5050",
     },
   },
 

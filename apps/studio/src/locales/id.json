@@ -22,7 +22,14 @@
     "storageUsage": "Terpakai {{used}} dari {{quota}}",
     "storageUnavailable": "Tidak tersedia di browser ini",
     "version": "Versi",
-    "checking": "Memeriksa…"
+    "checking": "Memeriksa…",
+    "contentCache": "Konten offline",
+    "contentCacheState": "Status",
+    "contentCacheReady": "Siap offline",
+    "contentCacheOffline": "Belum tersinkron",
+    "contentCacheIdle": "Menunggu",
+    "contentCacheAssets": "Aset tersimpan",
+    "contentCacheNote": "{{kinds}} kategori konten tersimpan di perangkat."
   },
   "capture": {
     "title": "Sesi foto",
@@ -117,7 +124,22 @@
     "fontSize": "Ukuran huruf",
     "color": "Warna",
     "renderPath": "Jalur render: {{path}}",
-    "canvasHint": "Kanvas {{width}}×{{height}} px (resolusi cetak penuh)."
+    "canvasHint": "Kanvas {{width}}×{{height}} px (resolusi cetak penuh).",
+    "print": "Cetak",
+    "printPaper": "Kertas",
+    "printBleed": "Bleed",
+    "printBleedHint": "Tambah 0,05 in di tiap sisi + tanda potong (kalau preset mendukung).",
+    "printNow": "Cetak sekarang",
+    "printDownload": "Unduh lembar",
+    "printPreview": "Pratinjau lembar cetak",
+    "printPlan": "Lembar {{sheet}} · template {{template}} · skala {{scale}}",
+    "printLast": "Lembar terakhir: {{filename}} — {{width}}×{{height}} px",
+    "starters": "Template bawaan",
+    "vignette": "Vignette latar",
+    "vignetteHint": "Gelapkan tepi latar supaya mata tertuju ke tengah",
+    "frameShadow": "Bayangan frame",
+    "frameShadowHint": "Beri bayangan pada frame yang dipilih",
+    "printError": "Gagal menyiapkan lembar cetak: {{message}}"
   },
   "footer": {
     "note": "Beli sekali, bukan langganan.",

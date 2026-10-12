@@ -25,5 +25,8 @@ export const LANDING_DIR = dir("LANDING_DIR", "../static/landing/");
 /** Hasil build studio SPA (`pnpm --filter @foto-booth/studio build`). */
 export const STUDIO_DIST_DIR = dir("STUDIO_DIST_DIR", "../../studio/dist/");
 
+/** Katalog konten yang dibundel (starters/frames/backgrounds/stickers). */
+export const CONTENT_DIR = dir("CONTENT_DIR", "../static/content/");
+
 /** Data runtime (galeri, dsb). Di-mount dari host, di luar image. */
 export const STORAGE_DIR = dir("STORAGE_DIR", "../../../storage/");

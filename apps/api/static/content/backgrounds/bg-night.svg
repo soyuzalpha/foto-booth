@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1800" width="1200" height="1800">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101828"/>
+      <stop offset="1" stop-color="#344054"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="1800" fill="url(#night)"/>
+  <g fill="#f9fafb" opacity="0.85">
+    <circle cx="180" cy="220" r="6"/>
+    <circle cx="420" cy="140" r="4"/>
+    <circle cx="760" cy="300" r="5"/>
+    <circle cx="1010" cy="180" r="4"/>
+    <circle cx="300" cy="520" r="4"/>
+    <circle cx="900" cy="640" r="5"/>
+  </g>
+</svg>

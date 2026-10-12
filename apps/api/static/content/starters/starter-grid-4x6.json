@@ -1,0 +1,16 @@
+{
+  "id": "starter-grid-4x6",
+  "name": "Grid Polaroid 4×6",
+  "size": { "width": 4, "height": 6, "dpi": 300, "name": "4×6 in" },
+  "background": { "type": "color", "value": "#fdf6e3", "hasVignette": false },
+  "frames": [
+    { "id": "f1", "x": 60, "y": 80, "width": 520, "height": 800, "rotation": 0, "slot": 0, "borderThickness": 12, "borderColor": "#0a0a0a", "hasShadow": true },
+    { "id": "f2", "x": 620, "y": 80, "width": 520, "height": 800, "rotation": 0, "slot": 1, "borderThickness": 12, "borderColor": "#0a0a0a", "hasShadow": true },
+    { "id": "f3", "x": 60, "y": 920, "width": 520, "height": 800, "rotation": 0, "slot": 2, "borderThickness": 12, "borderColor": "#0a0a0a", "hasShadow": true },
+    { "id": "f4", "x": 620, "y": 920, "width": 520, "height": 800, "rotation": 0, "slot": 3, "borderThickness": 12, "borderColor": "#0a0a0a", "hasShadow": true }
+  ],
+  "textElements": [],
+  "stickers": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

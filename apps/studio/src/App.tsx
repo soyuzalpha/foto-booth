@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { APP_NAME, APP_VERSION, LOCALES, type Locale } from "@foto-booth/shared";
+import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
+import { useContentSync } from "./lib/content/useContentSync.ts";
 import { setLocale } from "./lib/i18n";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnlineStatus } from "./lib/useOnlineStatus";
@@ -37,6 +38,7 @@ function StatusPanel(): React.JSX.Element {
   const online = useOnlineStatus();
   const sw = useServiceWorkerStatus();
   const storage = useStorageStatus();
+  const content = useContentSync(CONTENT_KINDS);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [probed, setProbed] = useState(false);
 
@@ -161,6 +163,36 @@ function StatusPanel(): React.JSX.Element {
               {storage.kind === "unsupported" ? t("status.storageUnavailable") : t("status.checking")}
             </p>
           )}
+        </section>
+
+        <section className="card card-wide" data-testid="card-content-cache">
+          <h2>{t("status.contentCache")}</h2>
+          <dl>
+            <div className="row">
+              <dt>{t("status.contentCacheState")}</dt>
+              <dd>
+                <span
+                  className={`badge ${content.status === "ok" ? "badge-ok" : "badge-warn"}`}
+                  data-testid="content-cache-status"
+                >
+                  {content.status === "ok"
+                    ? t("status.contentCacheReady")
+                    : content.status === "syncing"
+                      ? t("status.checking")
+                      : content.status === "offline"
+                        ? t("status.contentCacheOffline")
+                        : t("status.contentCacheIdle")}
+                </span>
+              </dd>
+            </div>
+            <div className="row">
+              <dt>{t("status.contentCacheAssets")}</dt>
+              <dd data-testid="content-cache-assets">{content.cachedAssets}</dd>
+            </div>
+          </dl>
+          <p className="note">
+            {t("status.contentCacheNote", { kinds: content.syncedKinds.length })}
+          </p>
         </section>
       </div>
     </>

@@ -1,0 +1,33 @@
+{
+  "id": "starter-strip-2x6",
+  "name": "Strip Klasik 2×6",
+  "size": { "width": 2, "height": 6, "dpi": 300, "name": "2×6 in — strip" },
+  "background": { "type": "color", "value": "#ffffff", "hasVignette": false },
+  "frames": [
+    { "id": "f1", "x": 40, "y": 55, "width": 520, "height": 270, "rotation": 0, "slot": 0, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false },
+    { "id": "f2", "x": 40, "y": 339, "width": 520, "height": 270, "rotation": 0, "slot": 1, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false },
+    { "id": "f3", "x": 40, "y": 623, "width": 520, "height": 270, "rotation": 0, "slot": 2, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false },
+    { "id": "f4", "x": 40, "y": 907, "width": 520, "height": 270, "rotation": 0, "slot": 3, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false },
+    { "id": "f5", "x": 40, "y": 1191, "width": 520, "height": 270, "rotation": 0, "slot": 4, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false },
+    { "id": "f6", "x": 40, "y": 1475, "width": 520, "height": 270, "rotation": 0, "slot": 5, "borderThickness": 0, "borderColor": "#0a0a0a", "hasShadow": false }
+  ],
+  "textElements": [
+    {
+      "id": "t1",
+      "text": "{event}",
+      "x": 40,
+      "y": 24,
+      "width": 520,
+      "height": 30,
+      "fontSize": 20,
+      "fontFamily": "Inter, system-ui, sans-serif",
+      "color": "#0a0a0a",
+      "strokeWidth": 0,
+      "align": "center",
+      "rotation": 0
+    }
+  ],
+  "stickers": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

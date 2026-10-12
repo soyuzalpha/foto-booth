@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { APP_NAME, APP_VERSION, STUDIO_BASE_PATH } from "@foto-booth/shared";
 
-import { LANDING_DIR, STUDIO_DIST_DIR } from "./paths.ts";
+import { CONTENT_DIR, LANDING_DIR, STUDIO_DIST_DIR } from "./paths.ts";
 import { contentRoutes } from "./routes/content.ts";
 import { galleryRoutes } from "./routes/gallery.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -23,6 +23,14 @@ export async function buildApp(
   await healthRoutes(app);
   await galleryRoutes(app);
   await contentRoutes(app);
+
+  // Katalog konten yang dibundel — di-serve statis supaya studio bisa
+  // meng-cache-nya untuk mode offline.
+  await app.register(fastifyStatic, {
+    root: CONTENT_DIR,
+    prefix: "/content/",
+    decorateReply: false,
+  });
 
   // Landing page (neo-brutalism) di `/`.
   await app.register(fastifyStatic, {
