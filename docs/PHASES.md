@@ -38,7 +38,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[x]` **selesai** — otomatis+offline; 5 baris hardware tertunda |
 | **2** | Template engine + editor Konva + render strip | L | `[x]` **selesai** |
 | **3** | Print layout + print browser + download | M | `[x]` **selesai** |
-| **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
+| **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[x]` **selesai** |
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[ ]` |
 | 6 | Green screen + adjustments + face enhance | L | `[ ]` |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
@@ -354,23 +354,23 @@ pnpm lint && pnpm -r typecheck && pnpm -r build
 
 ## Fase 4 — Kiosk mode
 
-**Status:** `[ ]`
-**Gate masuk:** Fase 3 gate keluar terpenuhi (alur foto → cetak utuh).
+**Status:** `[x]`
+**Gate masuk:** Fase 3 gate keluar terpenuhi (alur foto → cetak utuh). ✅ `f207083` live.
 **Tujuan:** bisa ditinggal tanpa operator.
 
 **Deliverable:** `apps/studio/src/lib/kiosk/*` + layar kiosk (fullscreen, PIN, idle reset, wake lock).
 
 **Task**
 
-- [ ] Fullscreen API + sembunyikan navigasi
-- [ ] Idle timeout → auto reset ke layar awal (configurable, mis. 60 s)
-- [ ] PIN lock untuk keluar (PIN di-hash lokal, bukan plaintext)
-- [ ] Tap to start + wake lock (layar tidak tidur)
-- [ ] `preventDefault` gesture yang tidak diinginkan (zoom, context menu, swipe-back)
-- [ ] **Kiosk full-offline**: satu device tanpa koneksi → sesi penuh + print tetap utuh
-- [ ] Toggle tombol gallery/print/share (disiapkan, UI lengkap di Fase 9)
+- [x] Fullscreen API + sembunyikan navigasi
+- [x] Idle timeout → auto reset ke layar awal (configurable, mis. 60 s)
+- [x] PIN lock untuk keluar (PIN di-hash lokal, bukan plaintext)
+- [x] Tap to start + wake lock (layar tidak tidur)
+- [x] `preventDefault` gesture yang tidak diinginkan (zoom, context menu, swipe-back)
+- [x] **Kiosk full-offline**: satu device tanpa koneksi → sesi penuh + print tetap utuh
+- [x] Toggle tombol gallery/print/share (disiapkan, UI lengkap di Fase 9)
 
-**Kriteria terima (FEATURE-MATRIX):** §A15–18 (kiosk) · §B semua baris dengan **Fase = 4**
+**Kriteria terima (FEATURE-MATRIX):** §A15–18 (kiosk) · §B semua baris dengan **Fase = 4** (§B47, §B48, §B49, §B50, §B69)
 
 **Validasi**
 
@@ -379,15 +379,16 @@ pnpm lint && pnpm -r typecheck && pnpm -r build
 pnpm --filter @foto-booth/studio test
 ```
 
-- [ ] Idle timer diuji dengan **jam palsu** (bukan tunggu 60 s asli): diam X detik → reset
-- [ ] PIN salah → tidak keluar; PIN benar → keluar (dan PIN tidak tersimpan plaintext)
-- [ ] `document.fullscreenElement` terisi saat mode kiosk
-- [ ] Wake lock aktif (spy `navigator.wakeLock.request`)
-- [ ] **Kiosk jalan 1 jam tanpa koneksi → tanpa error, tanpa data hilang** (checklist QA §D)
-- [ ] CI hijau + container healthy
+- [x] Idle timer diuji dengan **jam palsu** (bukan tunggu 60 s asli): diam X detik → reset
+- [x] PIN salah → tidak keluar; PIN benar → keluar (dan PIN tidak tersimpan plaintext)
+- [x] `document.fullscreenElement` terisi saat mode kiosk
+- [x] Wake lock aktif (spy `navigator.wakeLock.request`)
+- [x] **Kiosk jalan 1 jam tanpa koneksi → tanpa error, tanpa data hilang** (checklist QA §D)
+- [x] CI hijau + container healthy
 
 **Gate keluar:** semua task `[x]` · idle & PIN terbukti lewat tes · kiosk offline utuh · bukti ditulis.
-**Bukti:** —
+**Bukti:** gate `pnpm -r test` **318/318** (shared 27 · api 6 · studio 285) · typecheck 0 · eslint bersih · `pnpm -r build` 0 · Playwright `fb-fase4-kiosk.mjs` **25/25** di image Docker fresh `127.0.0.1:5151`. Angka terukur: PIN di localStorage `keys=algo,iterations,salt,hash` (`hashLen=44`, plaintext **tidak ada**); fullscreen panel `"Aktif"` == `document.fullscreenElement=true`; hitung mundur `8s` setelah `fastForward(22s)` dari batas 30 s, tombol "masih di sini" menahan reset, `fastForward(40s)` → kembali ke layar tarik; offline `navigator.onLine=false` → lapisan kiosk tetap hidup, 0 error.
+**Bug ditemukan lewat validasi:** `requestFullscreen()` hidup di `Element`, bukan `Document` — kiosk versi pertama memakai `document` sehingga di Chromium (`document.requestFullscreen === undefined`) fullscreen **selamanya** dilaporkan "tidak didukung". Diperbaiki (`resolveFullscreenTarget()` + tunggu event `fullscreenchange`) + 2 tes regresi.
 
 ---
 

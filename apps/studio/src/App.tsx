@@ -4,10 +4,13 @@ import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
+import KioskOverlay from "./components/KioskOverlay.tsx";
+import KioskPanel from "./components/KioskPanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
 import { useContentSync } from "./lib/content/useContentSync.ts";
 import { setLocale } from "./lib/i18n";
+import { useKiosk } from "./lib/kiosk/useKiosk.ts";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnlineStatus } from "./lib/useOnlineStatus";
 import { useServiceWorkerStatus } from "./lib/useServiceWorkerStatus";
@@ -203,10 +206,12 @@ export default function App(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
-  const [tab, setTab] = useState<"capture" | "template">("capture");
+  const [tab, setTab] = useState<"capture" | "template" | "kiosk">("capture");
+  const kiosk = useKiosk();
 
   return (
-    <div className="app">
+    <div className={`app${kiosk.enabled ? " is-kiosk" : ""}`}>
+      <KioskOverlay kiosk={kiosk} />
       <header className="top">
         <div className="top-in">
           <a className="brand" href="/studio/">
@@ -249,14 +254,26 @@ export default function App(): React.JSX.Element {
           >
             {t("tabs.template")}
           </button>
+          <button
+            className={`tab${tab === "kiosk" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "kiosk"}
+            data-testid="tab-kiosk"
+            onClick={() => setTab("kiosk")}
+          >
+            {t("tabs.kiosk")}
+          </button>
         </div>
 
         {tab === "capture" ? (
           <CapturePanel />
-        ) : (
+        ) : tab === "template" ? (
           <div data-testid="panel-template">
             <TemplatePanel />
           </div>
+        ) : (
+          <KioskPanel kiosk={kiosk} />
         )}
 
         {canInstall && (
