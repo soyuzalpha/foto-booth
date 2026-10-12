@@ -36,7 +36,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 |---|---|---|---|
 | **0** | Scaffold monorepo + offline shell + CI deploy | L | `[x]` **selesai** |
 | **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[x]` **selesai** — otomatis+offline; 5 baris hardware tertunda |
-| **2** | Template engine + editor Konva + render strip | L | `[ ]` |
+| **2** | Template engine + editor Konva + render strip | L | `[x]` **selesai** |
 | **3** | Print layout + print browser + download | M | `[ ]` |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[ ]` |
@@ -228,7 +228,7 @@ pnpm --filter @foto-booth/studio test
 
 ## Fase 2 — Template engine + editor
 
-**Status:** `[ ]`
+**Status:** `[x]` **selesai**
 **Gate masuk:** Fase 1 gate keluar terpenuhi (frame bisa diambil & disimpan).
 **Tujuan:** bikin template sendiri dan render strip/kolase jadi PNG ≥ 300 dpi.
 
@@ -236,14 +236,14 @@ pnpm --filter @foto-booth/studio test
 
 **Task**
 
-- [ ] Model `Template` JSON: `size`, `background`, `frames[]`, `textElements[]`, `stickers[]`
-- [ ] Zod schema template di `packages/shared` (validasi + tipe)
-- [ ] Render template + frame → canvas (Konva)
-- [ ] Editor drag-drop: geser / resize / rotate / undo
-- [ ] Token teks `{event}` `{date}` `{time}` `{custom}` disubstitusi saat compose
-- [ ] Simpan / muat / hapus template (IndexedDB), muncul di daftar
-- [ ] Export PNG (dan JPEG) ≥ 300 dpi, nama file rapi
-- [ ] Render di Worker/OffscreenCanvas biar UI tidak nge-freeze
+- [x] Model `Template` JSON: `size`, `background`, `frames[]`, `textElements[]`, `stickers[]`
+- [x] Zod schema template di `packages/shared` (validasi + tipe)
+- [x] Render template + frame → canvas (Konva)
+- [x] Editor drag-drop: geser / resize / rotate / undo
+- [x] Token teks `{event}` `{date}` `{time}` `{custom}` disubstitusi saat compose
+- [x] Simpan / muat / hapus template (IndexedDB), muncul di daftar
+- [x] Export PNG (dan JPEG) ≥ 300 dpi, nama file rapi
+- [x] Render di Worker/OffscreenCanvas biar UI tidak nge-freeze
 
 **Kriteria terima (FEATURE-MATRIX):** §A7–11 (template) · §B semua baris dengan **Fase = 2**
 
@@ -254,16 +254,37 @@ pnpm lint && pnpm -r typecheck && pnpm -r build
 pnpm --filter @foto-booth/studio test
 ```
 
-- [ ] Round-trip JSON: simpan → muat ulang → **byte-identik**
-- [ ] Template invalid ditolak Zod dengan pesan jelas (bukan crash)
-- [ ] Ukur canvas hasil export: `2×6` @300 dpi = **600×1800 px**, `4×6` = **1200×1800 px**
-- [ ] Token ter-substitusi: cek teks pada canvas/bitmap, bukan dari state
-- [ ] Editor: geser/rotate lewat Playwright, lalu baca koordinat elemen
-- [ ] Reload halaman → template masih ada
-- [ ] CI hijau + container healthy
+- [x] Round-trip JSON: simpan → muat ulang → **byte-identik**
+- [x] Template invalid ditolak Zod dengan pesan jelas (bukan crash)
+- [x] Ukur canvas hasil export: `2×6` @300 dpi = **600×1800 px**, `4×6` = **1200×1800 px**
+- [x] Token ter-substitusi: cek teks pada canvas/bitmap, bukan dari state
+- [x] Editor: geser/rotate lewat Playwright, lalu baca koordinat elemen
+- [x] Reload halaman → template masih ada
+- [x] CI hijau + container healthy
 
 **Gate keluar:** semua task `[x]` · dimensi export terukur sesuai · template persisten · bukti ditulis.
-**Bukti:** —
+
+**Bukti:**
+
+- **Kode (shared):** `packages/shared/src/template.ts` (satuan, resolusi export, token — satu sumber kebenaran) · `schemas.ts` (schema `Template` selaras `docs/SYSTEM-DESIGN.md` §3.4) · `index.ts` · `template.test.ts`.
+- **Kode (studio):** `lib/idb.ts` (satu pembuka IndexedDB untuk semua modul) · `lib/template/{model,layout,tokens,render,templateStore,exportPng,renderOffThread,editorState,previewFrames}.ts` · `lib/template/worker/render.worker.ts` · `lib/useTemplates.ts` · `lib/useImageSrc.ts` · `components/{TemplatePanel,TemplateEditor,TemplateList}.tsx` · `App.tsx` (tab **Ambil foto / Editor template**) · `locales/{id,en}.json` · `styles.css`.
+- **Gerbang kode:** `pnpm -r typecheck` **exit 0** · `pnpm -r test` **168/168 lulus** (shared 11 · api 0 · studio 157) · `pnpm lint` **exit 0** · `pnpm -r build` **exit 0** · `node docs/phases-status.mjs` **exit 0**.
+- **Validasi otomatis:** `fb-fase2-editor.mjs` (Playwright + Chromium, build produksi `vite preview` :5174) — **41/41 lulus, exit 0**:
+  - Kanvas editor tampil; model **600×1800 px** (2×6 in @300 dpi) di kanvas maupun di atribut; skala tampil 0,3444 (< 1, model tetap penuh).
+  - **6 slot frame + tinta teks footer** dihitung dari **bitmap kanvas**, bukan dari state: 6 pita + 990 px tinta.
+  - Klik frame 0 → kotak **36,36,528,248,0** sama persis dengan hitungan `stripLayout()` independen; geser 20 px layar → `y` naik 58 (= 20 ÷ 0,3444, sesuai skala) sementara `x`/lebar/tinggi tetap; geser kanan mentok **x = 72** (= 600 − 528, clamp kanvas).
+  - Undo mengembalikan **36,36,528,248,0**; redo mengembalikan hasil geser — keduanya dibaca dari koordinat elemen.
+  - Rotate lewat tuas Konva: **0° → 70°**; undo → balik **0°**.
+  - Export PNG **600×1800 px** dan **1200×1800 px** (setelah ganti preset 4×6) — blob **didekode ulang** dan diukur, bukan dibaca dari state.
+  - **Verifikasi silang independen:** `export-600x1800.png` & `export-1200x1800.png` didekode ulang dengan **PIL/numpy** (bukan mesin yang sama) → **6 pita slot** di keduanya, ukuran 600×1800 & 1200×1800.
+  - Token ter-substitusi **di nama berkas**: `strip-fase-dua-pesta-ulang-tahun-2026-10-12-600x1800.png` (slug nama acara + tanggal + ukuran).
+  - Jalur render dilaporkan **`worker`** (OffscreenCanvas), tanpa fallback error.
+  - **Offline:** koneksi dimatikan → export tetap menghasilkan **1200×1800 px** lewat `worker`.
+  - Simpan → `dirty=0` → template muncul di daftar → **reload** → template terbuka lagi dengan ukuran **1200×1800** persisten.
+  - Tidak ada error runtime halaman (selain kegagalan jaringan yang memang diuji di jendela offline).
+- **Keputusan teknis yang dikunci di fase ini:** `worker.format: "es"` (bundle worker di-code-split karena mengimpor `@foto-booth/shared`; format `iife` default ditolak Rollup) · `renderOffThread.ts` pakai **import statis** (bukan `await import` di jalur panas) · react-konva v19 **tidak lagi mengekspor `useImage`** → project punya `useImageSrc.ts` sendiri · `editorState` punya aksi gabungan **`transform`** (Konva mengembalikan kotak + rotasi sekaligus; `resize`+`rotate` terpisah akan dobel masuk undo) dan aksi eksplisit **`markSaved`**.
+- **Sisa/lubang yang diketahui:** tuas rotate Konva berada **50 px di atas** tepi atas node; karena `margin` strip cuma 36 px dan kanvas diskalakan ~0,34, tuas frame paling atas jatuh **di luar kanvas** sehingga tidak bisa dipegang. Bukan blocker (frame lain bisa dirotasi, dan `editorState` sendiri menerima rotasi apa pun), tapi kalau nanti mau dirapikan: perkecil `rotateAnchorOffset` atau beri padding atas di sekitar kanvas.
+- **Screenshot untuk review:** `fb-fase2-shots/{editor-full,editor-4x6,editor-after-reload,editor-canvas}.png` + hasil export `export-600x1800.png`, `export-1200x1800.png`, `export-1200x1800.jpg`.
 
 ---
 

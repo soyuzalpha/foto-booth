@@ -82,6 +82,41 @@
     "button": "Install sebagai app",
     "hint": "Pasang di perangkat biar kebuka kayak aplikasi biasa, tanpa browser."
   },
+  "tabs": {
+    "capture": "Ambil foto",
+    "template": "Editor template"
+  },
+  "template": {
+    "title": "Editor template",
+    "subtitle": "Susun strip cetak: geser, ubah ukuran, putar. Hasil export memakai resolusi cetak penuh.",
+    "name": "Nama template",
+    "size": "Ukuran cetak",
+    "sizeCustom": "Ukuran lain (dari file)",
+    "eventName": "Nama acara",
+    "eventPlaceholder": "mis. Pernikahan Andi & Sari",
+    "saved": "Template tersimpan",
+    "new": "Baru",
+    "empty": "Belum ada template tersimpan.",
+    "delete": "Hapus",
+    "storageMemory": "Penyimpanan sementara: template tidak bertahan kalau halaman dimuat ulang.",
+    "undo": "Undo",
+    "redo": "Redo",
+    "addText": "Tambah teks",
+    "deleteElement": "Hapus elemen",
+    "save": "Simpan",
+    "reloadFrames": "Muat ulang foto",
+    "exportPng": "Export PNG",
+    "exportJpeg": "Export JPEG",
+    "inspector": "Properti",
+    "previewEmpty": "Belum ada foto dari sesi mana pun. Ambil foto dulu di tab \"Ambil foto\".",
+    "previewLoaded": "Memakai {{count}} foto dari sesi terakhir.",
+    "noSelection": "Pilih elemen di kanvas untuk mengubah propertinya.",
+    "textContent": "Isi teks",
+    "fontSize": "Ukuran huruf",
+    "color": "Warna",
+    "renderPath": "Jalur render: {{path}}",
+    "canvasHint": "Kanvas {{width}}×{{height}} px (resolusi cetak penuh)."
+  },
   "footer": {
     "note": "Beli sekali, bukan langganan.",
     "landing": "Beranda"

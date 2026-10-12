@@ -10,6 +10,7 @@
  * base64, jadi tidak ada pembengkakan 33%.
  */
 
+import { openDatabase, promisify, STORE_FRAMES } from "../idb.ts";
 import type { DeviceSource, StillStrategy } from "../transports/types.ts";
 
 export interface StoredFrame {
@@ -69,35 +70,7 @@ export class MemoryFrameStore implements FrameStore {
   }
 }
 
-const DB_NAME = "foto-booth";
-const DB_VERSION = 1;
-const STORE = "frames";
 const INDEX_SESSION = "sessionId";
-
-function promisify<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request gagal"));
-  });
-}
-
-function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = factory.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: "id" });
-        store.createIndex(INDEX_SESSION, "sessionId", { unique: false });
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("tidak bisa membuka IndexedDB"));
-    request.onblocked = () => reject(new Error("IndexedDB diblokir tab lain yang masih terbuka"));
-  });
-}
 
 export class IdbFrameStore implements FrameStore {
   private db: IDBDatabase | null = null;
@@ -114,7 +87,7 @@ export class IdbFrameStore implements FrameStore {
 
   private async tx(mode: IDBTransactionMode): Promise<IDBObjectStore> {
     const db = await this.handle();
-    return db.transaction(STORE, mode).objectStore(STORE);
+    return db.transaction(STORE_FRAMES, mode).objectStore(STORE_FRAMES);
   }
 
   async put(frame: StoredFrame): Promise<void> {

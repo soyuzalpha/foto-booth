@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
+import TemplatePanel from "./components/TemplatePanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
 import { setLocale } from "./lib/i18n";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
@@ -170,6 +171,7 @@ export default function App(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
+  const [tab, setTab] = useState<"capture" | "template">("capture");
 
   return (
     <div className="app">
@@ -194,7 +196,36 @@ export default function App(): React.JSX.Element {
 
         <StatusPanel />
 
-        <CapturePanel />
+        <div className="tabs" role="tablist" data-testid="tabs">
+          <button
+            className={`tab${tab === "capture" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "capture"}
+            data-testid="tab-capture"
+            onClick={() => setTab("capture")}
+          >
+            {t("tabs.capture")}
+          </button>
+          <button
+            className={`tab${tab === "template" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "template"}
+            data-testid="tab-template"
+            onClick={() => setTab("template")}
+          >
+            {t("tabs.template")}
+          </button>
+        </div>
+
+        {tab === "capture" ? (
+          <CapturePanel />
+        ) : (
+          <div data-testid="panel-template">
+            <TemplatePanel />
+          </div>
+        )}
 
         {canInstall && (
           <section className="install" style={{ marginTop: 22 }}>

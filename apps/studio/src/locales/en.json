@@ -82,6 +82,41 @@
     "button": "Install as an app",
     "hint": "Install it on your device so it opens like a regular app, without a browser."
   },
+  "tabs": {
+    "capture": "Capture",
+    "template": "Template editor"
+  },
+  "template": {
+    "title": "Template editor",
+    "subtitle": "Lay out the print strip: drag, resize, rotate. Exports use full print resolution.",
+    "name": "Template name",
+    "size": "Print size",
+    "sizeCustom": "Other size (from file)",
+    "eventName": "Event name",
+    "eventPlaceholder": "e.g. Andi & Sari's Wedding",
+    "saved": "Saved templates",
+    "new": "New",
+    "empty": "No saved templates yet.",
+    "delete": "Delete",
+    "storageMemory": "Temporary storage: templates will not survive a page reload.",
+    "undo": "Undo",
+    "redo": "Redo",
+    "addText": "Add text",
+    "deleteElement": "Delete element",
+    "save": "Save",
+    "reloadFrames": "Reload photos",
+    "exportPng": "Export PNG",
+    "exportJpeg": "Export JPEG",
+    "inspector": "Properties",
+    "previewEmpty": "No photos from any session yet. Take photos first in the \"Capture\" tab.",
+    "previewLoaded": "Using {{count}} photos from the last session.",
+    "noSelection": "Pick an element on the canvas to edit its properties.",
+    "textContent": "Text",
+    "fontSize": "Font size",
+    "color": "Color",
+    "renderPath": "Render path: {{path}}",
+    "canvasHint": "Canvas {{width}}×{{height}} px (full print resolution)."
+  },
   "footer": {
     "note": "Buy once, not a subscription.",
     "landing": "Home"

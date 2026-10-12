@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CONTENT_KINDS } from "./constants.ts";
+import { TEMPLATE_DPI_DEFAULT, TEMPLATE_MIN_EXPORT_DPI } from "./template.ts";
 
 /* ------------------------------------------------------------------ *
  * Health
@@ -69,52 +70,93 @@ export type GalleryPublic = z.infer<typeof GalleryPublicSchema>;
 
 /* ------------------------------------------------------------------ *
  * Template (murni JSON — sama seperti aslinya)
+ *
+ * Bentuknya mengikuti `docs/SYSTEM-DESIGN.md` §3.4. Dua hal yang gampang
+ * salah dan sengaja ditulis di sini:
+ *   · `size.width/height` dalam INCI, `dpi` menentukan piksel canvas.
+ *   · `x`/`y` semua elemen dalam PIKSEL canvas hasil, bukan inci.
  * ------------------------------------------------------------------ */
 
 export const TemplateSizeSchema = z.object({
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
-  /** DPI target saat cetak. */
-  dpi: z.number().int().positive().default(300),
+  /** Lebar dalam inci (boleh pecahan, mis. A4 = 8.27). */
+  width: z.number().positive(),
+  /** Tinggi dalam inci. */
+  height: z.number().positive(),
+  /** DPI target saat cetak. Minimal 300 supaya hasil tidak kasar. */
+  dpi: z.number().int().min(TEMPLATE_MIN_EXPORT_DPI).default(TEMPLATE_DPI_DEFAULT),
+  /** Label preset, mis. "2×6 in — strip". Murni buat UI. */
+  name: z.string().optional(),
 });
 export type TemplateSize = z.infer<typeof TemplateSizeSchema>;
 
+export const TemplateBackgroundSchema = z.object({
+  type: z.enum(["color", "image"]).default("color"),
+  /** `color` → "#ffffff"; `image` → URL atau data-URL. */
+  value: z.string().default("#ffffff"),
+  hasVignette: z.boolean().default(false),
+});
+export type TemplateBackground = z.infer<typeof TemplateBackgroundSchema>;
+
 export const TemplateFrameSchema = z.object({
-  id: z.string(),
-  /** Posisi & ukuran dalam koordinat template (px). */
+  id: z.string().min(1),
+  /** Kotak frame di canvas hasil (px). */
   x: z.number(),
   y: z.number(),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
+  width: z.number().positive(),
+  height: z.number().positive(),
   rotation: z.number().default(0),
   /** Urutan pengambilan foto untuk slot ini (0-based). */
   slot: z.number().int().nonnegative(),
+  /** Tebal garis tepi frame, px. 0 = tanpa tepi. */
+  borderThickness: z.number().nonnegative().default(0),
+  borderColor: z.string().default("#0a0a0a"),
+  /** Dipakai Fase 3 (shadow elemen); disimpan sekarang biar JSON stabil. */
+  hasShadow: z.boolean().default(false),
+  /** Rasio crop foto, mis. "4:5". Kosong = ikut rasio kotak frame. */
+  aspectRatio: z.string().optional(),
 });
 export type TemplateFrame = z.infer<typeof TemplateFrameSchema>;
 
 export const TemplateTextSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1),
+  /** Boleh berisi token: `{event}` `{date}` `{time}` `{custom}`. */
   text: z.string(),
+  /** Kotak teks di canvas hasil (px). `x`/`y` = sudut kiri-atas kotak. */
   x: z.number(),
   y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
   fontSize: z.number().positive(),
   fontFamily: z.string(),
   color: z.string(),
+  /** Garis tepi huruf; kosong = tanpa outline. */
+  stroke: z.string().optional(),
+  strokeWidth: z.number().nonnegative().default(0),
   align: z.enum(["left", "center", "right"]).default("center"),
-  /** Kalau true, teks diisi otomatis (mis. tanggal, hashtag event). */
-  binding: z.string().optional(),
+  rotation: z.number().default(0),
 });
 export type TemplateText = z.infer<typeof TemplateTextSchema>;
 
+export const TemplateStickerSchema = z.object({
+  id: z.string().min(1),
+  /** URL atau data-URL gambar sticker. */
+  src: z.string(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  rotation: z.number().default(0),
+});
+export type TemplateSticker = z.infer<typeof TemplateStickerSchema>;
+
 export const TemplateSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1),
   name: z.string().min(1),
   size: TemplateSizeSchema,
-  /** URL background; boleh kosong (putih). */
-  background: z.string().optional(),
+  background: TemplateBackgroundSchema,
   frames: z.array(TemplateFrameSchema),
   textElements: z.array(TemplateTextSchema),
-  stickers: z.array(z.string()),
+  stickers: z.array(TemplateStickerSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

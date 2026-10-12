@@ -66,4 +66,14 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
+
+  /**
+   * Worker render template meng-import `@foto-booth/shared`, jadi bundelnya
+   * **code-split**. Format default worker adalah `iife`, dan Rollup menolak
+   * `iife` untuk bundel yang di-split. `es` juga yang benar untuk
+   * `new Worker(url, { type: "module" })` — sama dengan yang dipakai runtime.
+   */
+  worker: {
+    format: "es",
+  },
 });
