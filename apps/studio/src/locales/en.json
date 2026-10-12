@@ -69,6 +69,7 @@
     "stalledBody": "The camera failed {{count}} times in a row. The session stopped — photos already taken are safe.",
     "demoMode": "Demo mode: this browser has no camera, so a fake camera is being used.",
     "demoPreview": "Fake camera preview",
+    "previewIdle": "Pick a camera first, then hit “Prepare session”.",
     "storageMemory": "Temporary storage: photos will not survive a page reload.",
     "shotAlt": "Shot {{index}}",
     "stateIdle": "Idle",

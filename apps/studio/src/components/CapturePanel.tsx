@@ -148,7 +148,13 @@ export default function CapturePanel(): React.JSX.Element {
           >
             <div className="preview-holder" ref={holderRef} />
 
-            {capture.demo && <div className="preview-empty">{t("capture.demoPreview")}</div>}
+            {capture.demo ? (
+              <div className="preview-empty">{t("capture.demoPreview")}</div>
+            ) : deviceId === null ? (
+              // Sebelum ini stage cuma kotak hitam kosong tanpa penjelasan —
+              // terbaca sebagai "ruang kosong". Sekarang ada arahan singkat.
+              <div className="preview-empty">{t("capture.previewIdle")}</div>
+            ) : null}
 
             {currentState === "countdown" && (
               <div key={seconds} className="preview-count" aria-live="polite">
@@ -262,84 +268,6 @@ export default function CapturePanel(): React.JSX.Element {
             <span>{t("capture.mirror")}</span>
           </label>
 
-          {/* ── pengaturan sesi (§A2 countdown, §A3 jumlah frame, §B4 review) ── */}
-          <fieldset className="settings" disabled={settingsLocked}>
-            <legend>{t("capture.settings")}</legend>
-
-            <label className="field">
-              <span>{t("capture.shotCount")}</span>
-              <select
-                value={String(capture.config.shotCount)}
-                onChange={(event) => capture.setConfig({ shotCount: Number(event.target.value) })}
-              >
-                {withCurrent(SHOT_OPTIONS, capture.config.shotCount).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={capture.config.countdownMs > 0}
-                onChange={(event) =>
-                  capture.setConfig({ countdownMs: event.target.checked ? 3000 : 0 })
-                }
-              />
-              <span>{t("capture.countdownToggle")}</span>
-            </label>
-
-            <label className="field">
-              <span>{t("capture.countdownSecs")}</span>
-              <select
-                value={String(capture.config.countdownMs)}
-                disabled={capture.config.countdownMs === 0}
-                onChange={(event) => capture.setConfig({ countdownMs: Number(event.target.value) })}
-              >
-                {withCurrent(COUNTDOWN_OPTIONS, capture.config.countdownMs).map((value) => (
-                  <option key={value} value={value}>
-                    {t("capture.secondsShort", { value: value / 1000 })}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>{t("capture.intervalSecs")}</span>
-              <select
-                value={String(capture.config.intervalMs)}
-                onChange={(event) => capture.setConfig({ intervalMs: Number(event.target.value) })}
-              >
-                {withCurrent(INTERVAL_OPTIONS, capture.config.intervalMs).map((value) => (
-                  <option key={value} value={value}>
-                    {t("capture.secondsShort", { value: value / 1000 })}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>{t("capture.reviewSecs")}</span>
-              <select
-                value={String(capture.config.reviewMs)}
-                onChange={(event) => capture.setConfig({ reviewMs: Number(event.target.value) })}
-              >
-                {withCurrent(REVIEW_OPTIONS, capture.config.reviewMs).map((value) => (
-                  <option key={value} value={value}>
-                    {value === 0
-                      ? t("capture.reviewManual")
-                      : t("capture.secondsShort", { value: value / 1000 })}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <p className="muted small">
-              {settingsLocked ? t("capture.settingsLocked") : t("capture.settingsHint")}
-            </p>
-          </fieldset>
 
           <div className="field-row">
             <button className="btn" type="button" disabled={!canArm} onClick={capture.arm}>
@@ -372,6 +300,85 @@ export default function CapturePanel(): React.JSX.Element {
           </button>
         </div>
       </div>
+
+      {/* ── pengaturan sesi (§A2 countdown, §A3 jumlah frame, §B4 review) ── */}
+      <fieldset className="settings settings-wide" disabled={settingsLocked}>
+        <legend>{t("capture.settings")}</legend>
+
+        <label className="field">
+          <span>{t("capture.shotCount")}</span>
+          <select
+            value={String(capture.config.shotCount)}
+            onChange={(event) => capture.setConfig({ shotCount: Number(event.target.value) })}
+          >
+            {withCurrent(SHOT_OPTIONS, capture.config.shotCount).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={capture.config.countdownMs > 0}
+            onChange={(event) =>
+              capture.setConfig({ countdownMs: event.target.checked ? 3000 : 0 })
+            }
+          />
+          <span>{t("capture.countdownToggle")}</span>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.countdownSecs")}</span>
+          <select
+            value={String(capture.config.countdownMs)}
+            disabled={capture.config.countdownMs === 0}
+            onChange={(event) => capture.setConfig({ countdownMs: Number(event.target.value) })}
+          >
+            {withCurrent(COUNTDOWN_OPTIONS, capture.config.countdownMs).map((value) => (
+              <option key={value} value={value}>
+                {t("capture.secondsShort", { value: value / 1000 })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.intervalSecs")}</span>
+          <select
+            value={String(capture.config.intervalMs)}
+            onChange={(event) => capture.setConfig({ intervalMs: Number(event.target.value) })}
+          >
+            {withCurrent(INTERVAL_OPTIONS, capture.config.intervalMs).map((value) => (
+              <option key={value} value={value}>
+                {t("capture.secondsShort", { value: value / 1000 })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.reviewSecs")}</span>
+          <select
+            value={String(capture.config.reviewMs)}
+            onChange={(event) => capture.setConfig({ reviewMs: Number(event.target.value) })}
+          >
+            {withCurrent(REVIEW_OPTIONS, capture.config.reviewMs).map((value) => (
+              <option key={value} value={value}>
+                {value === 0
+                  ? t("capture.reviewManual")
+                  : t("capture.secondsShort", { value: value / 1000 })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="muted small">
+          {settingsLocked ? t("capture.settingsLocked") : t("capture.settingsHint")}
+        </p>
+      </fieldset>
 
       {/* ── hasil ── */}
       <div className="frames">

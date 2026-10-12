@@ -69,6 +69,7 @@
     "stalledBody": "Kamera gagal {{count}} kali berturut-turut. Sesi berhenti — foto yang sudah diambil tetap aman.",
     "demoMode": "Mode demo: browser ini tidak punya kamera, jadi kamera tiruan yang dipakai.",
     "demoPreview": "Pratinjau kamera tiruan",
+    "previewIdle": "Pilih kamera dulu, lalu tekan “Siapkan sesi”.",
     "storageMemory": "Penyimpanan sementara: foto tidak bertahan kalau halaman dimuat ulang.",
     "shotAlt": "Jepretan {{index}}",
     "stateIdle": "Idle",

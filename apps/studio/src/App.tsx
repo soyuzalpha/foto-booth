@@ -227,11 +227,10 @@ export default function App(): React.JSX.Element {
       </header>
 
       <main className="main">
-        <span className="eyebrow">{t("status.mode")}</span>
-        <h1>{t("status.title")}</h1>
-        <p className="sub">{t("status.subtitle")}</p>
-
-        <StatusPanel />
+        <div className="hero">
+          <h1>{t("status.title")}</h1>
+          <p className="sub">{t("app.tagline")}</p>
+        </div>
 
         <div className="tabs" role="tablist" data-testid="tabs">
           <button
@@ -275,6 +274,17 @@ export default function App(): React.JSX.Element {
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}
+
+        {/* Dashboard status dipindah ke bawah konten: dulu dia duduk di ATAS
+            panel capture dan memakan ~700px, jadi capture selalu butuh scroll.
+            Sekarang jadi panel lipat di kaki halaman. */}
+        <details className="status-panel">
+          <summary>
+            {t("status.title")}
+            <span className="muted"> — {t("status.subtitle")}</span>
+          </summary>
+          <StatusPanel />
+        </details>
 
         {canInstall && (
           <section className="install" style={{ marginTop: 22 }}>
