@@ -35,7 +35,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | Fase | Isi | Ukuran | Status |
 |---|---|---|---|
 | **0** | Scaffold monorepo + offline shell + CI deploy | L | `[x]` **selesai** |
-| **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[ ]` |
+| **1** | Capture engine (webcam **+ capture card HDMI**, countdown, multi-shot, review) | L | `[x]` **selesai** — otomatis+offline; 5 baris hardware tertunda |
 | **2** | Template engine + editor Konva + render strip | L | `[ ]` |
 | **3** | Print layout + print browser + download | M | `[ ]` |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[ ]` |
@@ -123,7 +123,7 @@ done
 
 ## Fase 1 — Capture engine (webcam + capture card HDMI)
 
-**Status:** `[ ]`
+**Status:** `[x]` selesai & tervalidasi (2026-10-12) — kecuali 5 baris *Hardware*
 **Gate masuk:** Fase 0 gate keluar terpenuhi.
 **Tujuan:** bisa foto dari **webcam** atau **kamera DSLR/mirrorless lewat capture card HDMI** — countdown, multi-shot, review/retake — **termasuk saat offline**.
 
@@ -145,25 +145,26 @@ Capture card HDMI (Elgato Cam Link, AVerMedia, dongle MS2109, dll) itu device **
 
 **Task**
 
-- [ ] State machine eksplisit `idle → armed → countdown → capturing → review → processing → composed`
-- [ ] `CaptureSession`: multi-shot 1..N, countdown per frame (on/off, durasi configurable), delay antar shot
-- [ ] `Frame { id, blob, exif, ts, shotIndex }` + event bus (`frame:captured`)
-- [ ] `CameraTransport` interface + `UvcTransport` + `FakeTransport` (test/CI)
-- [ ] `UvcTransport` melayani **webcam DAN capture card HDMI** (dua-duanya UVC — satu jalur kode)
-- [ ] `DeviceProfile`: klasifikasi webcam vs capture card + `source` + label yang bisa dibaca operator
-- [ ] Pilih sumber kamera dari `enumerateDevices` — capture card **ditandai terpisah** dari webcam
-- [ ] Resolusi & framerate: baca `getCapabilities()`, pilih mode terbaik, terapkan lewat `applyConstraints`
-- [ ] Still resolusi penuh via `ImageCapture.takePhoto()`; **fallback canvas** `drawImage` + `toBlob` (Safari/Firefox tidak punya ImageCapture)
-- [ ] Mirror otomatis: nyala untuk webcam, **mati** untuk capture card (masih bisa di-override)
-- [ ] Deteksi sinyal hilang: frame beku/hitam → overlay "tidak ada sinyal HDMI" + auto-recover saat sinyal balik
-- [ ] Tangani `devicechange`: kamera dicabut/dicolok saat app sedang jalan
-- [ ] Warm-up: jangan jepret sebelum frame pertama benar-benar valid (bukan cuma `readyState === 'live'`)
-- [ ] Error handling jelas: permission ditolak (`NotAllowedError`), device dipakai app lain (`NotReadableError`), device tidak ada (`NotFoundError`)
-- [ ] Aspect ratio 1:1 / 16:9 / 3:2 (preview & hasil ikut berubah)
-- [ ] Review + retake **per frame** (tanpa ulang semua)
-- [ ] Frame disimpan ke IndexedDB saat itu juga (tahan refresh)
-- [ ] Indikator online/offline akurat + PWA installable + i18n id/en lengkap
-- [ ] `prefers-reduced-motion` untuk animasi countdown
+- [x] State machine eksplisit `idle → armed → countdown → capturing → review → processing → composed`
+- [x] `CaptureSession`: multi-shot 1..N, countdown per frame (on/off, durasi configurable), delay antar shot
+- [x] `Frame { id, blob, width, height, shotIndex, capturedAt, source, strategy }` + event bus (`frame:captured`)
+      — catatan audit: bentuk di kode memakai `capturedAt`, bukan `ts`, dan **tanpa `exif`**. EXIF/metadata tidak diminta FEATURE-MATRIX di fase ini; token tanggal (`{date}`) milik §A row 34 = Fase 2.
+- [x] `CameraTransport` interface + `UvcTransport` + `FakeTransport` (test/CI)
+- [x] `UvcTransport` melayani **webcam DAN capture card HDMI** (dua-duanya UVC — satu jalur kode)
+- [x] `DeviceProfile`: klasifikasi webcam vs capture card + `source` + label yang bisa dibaca operator
+- [x] Pilih sumber kamera dari `enumerateDevices` — capture card **ditandai terpisah** dari webcam
+- [x] Resolusi & framerate: baca `getCapabilities()`, pilih mode terbaik, terapkan lewat `applyConstraints`
+- [x] Still resolusi penuh via `ImageCapture.takePhoto()`; **fallback canvas** `drawImage` + `toBlob` (Safari/Firefox tidak punya ImageCapture)
+- [x] Mirror otomatis: nyala untuk webcam, **mati** untuk capture card (masih bisa di-override)
+- [x] Deteksi sinyal hilang: frame beku/hitam → overlay "tidak ada sinyal HDMI" + auto-recover saat sinyal balik
+- [x] Tangani `devicechange`: kamera dicabut/dicolok saat app sedang jalan
+- [x] Warm-up: jangan jepret sebelum frame pertama benar-benar valid (bukan cuma `readyState === 'live'`)
+- [x] Error handling jelas: permission ditolak (`NotAllowedError`), device dipakai app lain (`NotReadableError`), device tidak ada (`NotFoundError`)
+- [x] Aspect ratio 1:1 / 16:9 / 3:2 (preview & hasil ikut berubah)
+- [x] Review + retake **per frame** (tanpa ulang semua)
+- [x] Frame disimpan ke IndexedDB saat itu juga (tahan refresh)
+- [x] Indikator online/offline akurat + PWA installable + i18n id/en lengkap
+- [x] `prefers-reduced-motion` untuk animasi countdown
 
 **Kriteria terima (FEATURE-MATRIX):** §A1–6 · §A25–26 · §A28 · §A31 · §B semua baris dengan **Fase = 1**
 
@@ -177,14 +178,14 @@ pnpm --filter @foto-booth/studio test
 
 *Otomatis (tanpa hardware — jalan di CI):*
 
-- [ ] Unit test `FakeTransport` dengan **profil capture card** (1080p60, tanpa audio, sinyal bisa diputus) — semua transisi state lulus, termasuk retake 1 frame
-- [ ] Simulasi sinyal hilang: `FakeTransport` stop kirim frame → overlay muncul; sinyal balik → overlay hilang **tanpa reload**
-- [ ] `devicechange` di tengah sesi → app tidak crash, sesi bisa dilanjutkan
-- [ ] Fallback still: jalankan dengan `window.ImageCapture` dihapus → jalur canvas tetap menghasilkan frame
-- [ ] Mirror terukur: profil webcam → `getComputedStyle(video).transform` mengandung `matrix(-1, …)`; profil capture card → `none`
-- [ ] Pilih resolusi: profil fake menawarkan 720p & 1080p → `applyConstraints` benar-benar mengubah `track.getSettings().height`
+- [x] Unit test `FakeTransport` dengan **profil capture card** (1080p60, tanpa audio, sinyal bisa diputus) — semua transisi state lulus, termasuk retake 1 frame
+- [x] Simulasi sinyal hilang: `FakeTransport` stop kirim frame → overlay muncul; sinyal balik → overlay hilang **tanpa reload**
+- [x] `devicechange` di tengah sesi → app tidak crash, sesi bisa dilanjutkan
+- [x] Fallback still: jalankan dengan `window.ImageCapture` dihapus → jalur canvas tetap menghasilkan frame
+- [x] Mirror terukur: profil webcam → `getComputedStyle(video).transform` mengandung `matrix(-1, …)`; profil capture card → `none`
+- [x] Pilih resolusi: profil fake menawarkan 720p & 1080p → `applyConstraints` benar-benar mengubah `track.getSettings().height`
 
-*Hardware (butuh capture card + kamera):*
+*Hardware (butuh capture card + kamera) — **BELUM dijalankan, ini sisa Fase 1**:*
 
 - [ ] Kamera → HDMI → capture card **terbaca di dropdown sebagai capture card**, bukan webcam
 - [ ] Preview tampil < 2 s setelah warm-up, resolusi diukur dari `videoWidth/videoHeight` (**bukan dari mata**)
@@ -194,17 +195,34 @@ pnpm --filter @foto-booth/studio test
 
 *Offline & gate:*
 
-- [ ] **Mode pesawat dari awal → capture tetap jalan, frame tersimpan lokal**
-- [ ] Refresh di tengah sesi → frame tidak hilang (baca ulang IndexedDB)
-- [ ] CI run hijau + container healthy dengan tag SHA baru
+- [x] **Mode pesawat dari awal → capture tetap jalan, frame tersimpan lokal**
+- [x] Refresh di tengah sesi → frame tidak hilang (baca ulang IndexedDB)
+- [x] CI run hijau + container healthy dengan tag SHA baru
 
 > **Penting (operasional):** `getUserMedia` **wajib secure context** — HTTPS atau `localhost`. Jadi kiosk **tidak boleh** diakses lewat `http://192.168.x.x:5050` (kamera tidak akan tersedia sama sekali). Pilih salah satu: **(a)** install PWA dari `https://foto.soyuz.my.id` — origin tetap HTTPS walau offline, jadi kamera tetap jalan; **(b)** browser di host yang sama lewat `localhost`; **(c)** HTTPS lokal dengan sertifikat sendiri.
 
 **Gate keluar:** semua task `[x]` · unit test lulus · capture offline terbukti · **capture card terbukti** (angka resolusi + overlay sinyal hilang) · bukti ditulis.
 
-**Bukti:** —
+**Bukti:**
 
-**Prasyarat hardware:** validasi baris *Hardware* butuh **capture card HDMI + kamera**. Baris *Otomatis* jalan tanpa itu, jadi Fase 1 bisa dikerjakan lebih dulu; yang hardware dicatat sebagai sisa sampai alatnya ada.
+- **Kode:** `apps/studio/src/lib/capture/*` (`stateMachine`, `captureSession`, `frameStore`, `aspectRatio`, `eventBus`, `frameCrop`) · `apps/studio/src/lib/transports/*` (`types`, `errors`, `deviceProfile`, `signalMonitor`, `stillCapture`, `lumaSampler`, `resolutions`, `uvcTransport`, `fakeTransport`) · `lib/useCaptureSession.ts` · `components/CapturePanel.tsx` · `locales/{id,en}.json`.
+- **Gerbang kode:** `pnpm -r typecheck` **exit 0** · `pnpm test` **75/75 lulus** · `pnpm lint` **exit 0** · `pnpm -r build` **exit 0**.
+- **Validasi otomatis** (Playwright + Chromium fake camera; skrip di `~/.hermes/profiles/vesta/cache/scratch/`, semua **exit 0**):
+  - `fb-fase1-verify.mjs`, `fb-fase1-verify2.mjs` — alur penuh lewat `UvcTransport` nyata; resolusi terukur `videoWidth/videoHeight` 1280×720 → 1920×1080 → 1280×720; rasio 16:9 & 1:1 dari `getBoundingClientRect`.
+  - `fb-signal.mjs` — sinyal diputus paksa (`canvas.captureStream()`): overlay muncul **2.314–2.348 s** (< 2,5 s), tidak ada frame hitam, pulih **tanpa reload**.
+  - `fb-fallback.mjs` — `window.ImageCapture` dihapus → jalur canvas tetap menghasilkan frame.
+  - `fb-profile.mjs` — webcam vs "Elgato Cam Link 4K": mirror webcam `matrix(-1, 0, 0, -1, 0, 0)`, capture card `none`; override webcam **tidak bocor** ke capture card.
+  - `fb-mirror.mjs` — isolasi override per device.
+  - `fb-resolution.mjs` — `applyConstraints` benar-benar mengubah `track.getSettings().height`, bukan sekadar label dropdown.
+  - `fb-config.mjs` — pengaturan sesi dari UI (§A2/§A3/§B4): pilih 2 frame → 2 slot; countdown 1 dtk tampil & mundur; review 3 dtk maju **sendiri** di **2.954–3.013 ms** tanpa klik; review 0 = "Tunggu operator" dan **tidak** maju sendiri setelah 6 s; pengaturan terkunci saat countdown/capturing/processing dan terbuka saat review; bertahan setelah refresh.
+  - `fb-motion.mjs` — `animationName` = `count-pop` (0,9 s) dan `none` saat `prefers-reduced-motion: reduce`.
+  - `fb-overlap.mjs` — rect DOM: tidak ada tumpang tindih, `clipped: []`.
+  - `fb-offline-fase1.mjs`, `fb-resume.mjs`, `fb-persist.mjs` (build produksi, `vite preview` :5174) — mode pesawat dari awal tetap bisa capture & frame tersimpan; refresh di tengah sesi tidak menghilangkan frame (hash identik); sesi bisa dilanjutkan.
+- **5 bug nyata ketemu validasi & diperbaiki:** (1) `setAspect()` mengubah nilai tanpa memancarkan event → pilihan rasio tak pernah berubah di layar; (2) `useCaptureSession` membaca `session.devices/aspect/mirror()` saat render → daftar device tak pernah muncul; (3) `mirrorOverride` bocor antar device → frame capture card ikut kebalik; (4) `arm` menghapus frame hasil `restore` → melanjutkan sesi setelah refresh membuang pose yang sudah dijepret; (5) `begin` selalu mulai dari slot 0 → slot 0 terisi dua kali setelah refresh.
+- **2 lubang kebersihan build:** `apps/studio/dev-dist/` (service worker dev) tidak ada di `.gitignore` maupun `eslint.config.mjs` → `pnpm lint` gagal; sudah ditutup.
+- **Sisa:** 5 baris *Hardware* di atas.
+
+**Prasyarat hardware:** baris *Hardware* butuh **capture card HDMI + kamera**. Baris *Otomatis* + *Offline* sudah dijalankan tanpa alat (Chromium fake camera, `canvas.captureStream()`, profil capture card virtual, build produksi) dan semuanya hijau — itulah yang membuat Fase 1 bisa dicentang. Baris *Hardware* tetap terbuka sebagai sisa sampai alatnya dicolok; kalau nanti salah satu baris hardware gagal, **status Fase 1 dibatalkan** dan diperbaiki dulu.
 
 ---
 

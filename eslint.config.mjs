@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "**/dev-dist/**",
       "**/node_modules/**",
       "**/storage/**",
       "apps/api/static/**",

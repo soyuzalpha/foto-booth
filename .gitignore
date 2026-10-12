@@ -12,6 +12,8 @@ out/
 # vite
 .vite/
 apps/studio/dist/
+# service worker dev (dibuat vite-plugin-pwa saat `dev`) — artefak, bukan sumber
+apps/studio/dev-dist/
 
 # runtime data (lives on the host, mounted into the container)
 storage/

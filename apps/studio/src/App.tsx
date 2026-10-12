@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { APP_NAME, APP_VERSION, LOCALES, type Locale } from "@foto-booth/shared";
 
+import CapturePanel from "./components/CapturePanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
 import { setLocale } from "./lib/i18n";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
@@ -193,13 +194,7 @@ export default function App(): React.JSX.Element {
 
         <StatusPanel />
 
-        <section className="session" style={{ marginTop: 26 }}>
-          <div>
-            <h2>{t("session.title")}</h2>
-            <p>{t("session.body")}</p>
-          </div>
-          <span className="soon">{t("session.cta")}</span>
-        </section>
+        <CapturePanel />
 
         {canInstall && (
           <section className="install" style={{ marginTop: 22 }}>

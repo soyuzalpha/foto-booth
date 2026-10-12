@@ -50,6 +50,12 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      # Validasi otomatis Fase 1: mesin capture diuji dengan FakeTransport +
+      # jam palsu, jadi jalur device hilang / sinyal putus / retry ikut terjaga
+      # tanpa perlu kamera atau capture card di runner.
+      - name: Test
+        run: pnpm test
+
       - name: Build
         run: pnpm build
 
