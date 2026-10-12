@@ -47,6 +47,7 @@
     "signalOk": "Signal OK",
     "noSignal": "No signal",
     "noSignalBody": "No signal from the camera. Check the HDMI cable or the camera battery.",
+    "noSignalBodyWebcam": "The camera stopped sending frames. Unplug and replug it, or pick another camera.",
     "arm": "Prepare session",
     "begin": "Start",
     "shootNow": "Shoot now",

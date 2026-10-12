@@ -81,6 +81,15 @@ export interface CameraTransport {
   /** Elemen video yang menerima stream — UI memasangnya ke DOM. */
   videoElement?(): HTMLVideoElement | null;
 
+  /**
+   * Device yang sedang tersambung, atau `null` kalau belum ada.
+   *
+   * Dipakai untuk memutuskan perilaku yang bergantung pada jenis device
+   * (mirror default, deteksi sinyal hilang) tanpa harus menebak dari daftar
+   * yang mungkin belum terisi.
+   */
+  currentDevice?(): CameraDevice | null;
+
   /** Tunggu frame pertama benar-benar valid (warm-up capture card). */
   waitReady?(timeoutMs?: number): Promise<boolean>;
 

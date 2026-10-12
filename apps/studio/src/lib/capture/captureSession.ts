@@ -451,6 +451,24 @@ export class CaptureSession {
   private startSignalMonitor(): void {
     this.stopSignalMonitor();
 
+    // Deteksi sinyal hilang itu **khusus capture card** — dan bukan detail
+    // kosmetik. Heuristiknya (frame hitam: luma <= 8, frame beku: delta <= 1.2
+    // selama 4 sampel) tidak berlaku untuk webcam: ruangan redup menjatuhkan
+    // luma di bawah ambang hitam, dan orang yang duduk manis menghasilkan frame
+    // "beku". Keduanya lalu dinyatakan `no-signal`, dan akibatnya berlipat:
+    // panel merah menutupi preview (operator mengira kamera tidak terbuka) dan
+    // `stateMachine` menahan countdown di 0 selamanya, jadi sesi tidak pernah
+    // menjepret satu frame pun.
+    //
+    // Webcam memang tidak butuh deteksi ini: kalau kabelnya lepas, track-nya
+    // `ended` dan jalur `device:lost` yang sudah ada yang menanganinya.
+    if (!this.isCaptureCard()) {
+      // Harus eksplisit `ok`, bukan dibiarkan `unknown`: UI menampilkan badge
+      // sinyal, dan "belum ada pendapat" bukan jawaban yang benar di sini.
+      this.dispatch({ type: "signal", signal: "ok" });
+      return;
+    }
+
     const sample = this.transport.lumaSampler?.() ?? null;
     if (sample === null) return;
 
@@ -464,6 +482,26 @@ export class CaptureSession {
     });
 
     this.monitor.start();
+  }
+
+  /**
+   * Device terpilih sekarang ini capture card?
+   *
+   * Sumber utamanya daftar device yang sudah diklasifikasi. Kalau device belum
+   * ada di daftar — `connect()` dipanggil langsung tanpa `refreshDevices()`,
+   * atau label masih kosong sebelum izin diberikan — transport ditanya sebagai
+   * cadangan. Default-nya `webcam`, dan itu memang pilihan paling aman: tidak
+   * memasang overlay "cek kabel HDMI" pada kamera biasa.
+   */
+  private isCaptureCard(): boolean {
+    const deviceId = this.snapshotValue.deviceId;
+    if (deviceId === null) return false;
+
+    const listed = this.devicesValue.find((candidate) => candidate.id === deviceId);
+    if (listed !== undefined) return listed.source === "capture-card";
+
+    const connected = this.transport.currentDevice?.() ?? null;
+    return connected?.source === "capture-card";
   }
 
   private stopSignalMonitor(): void {

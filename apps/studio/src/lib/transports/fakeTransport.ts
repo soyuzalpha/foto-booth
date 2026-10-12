@@ -97,6 +97,8 @@ export class FakeTransport implements CameraTransport {
 
   /** Nilai luma yang dikembalikan sampler saat sinyal hidup. */
   private lumaValue = 128;
+  /** Adegan dibekukan? Lihat `freezeScene()`. */
+  private frozen = false;
   /** Penghitung sampel — dipakai untuk membuat feed terlihat berubah. */
   private sampleTick = 0;
   private connected = false;
@@ -142,6 +144,23 @@ export class FakeTransport implements CameraTransport {
     this.lumaValue = value;
   }
 
+  /**
+   * Bekukan adegan: sampler mengembalikan grid **identik** tiap sampel.
+   *
+   * Ini meniru kamera yang diarahkan ke ruangan yang memang tidak berubah —
+   * bukan kerusakan. Tanpa knob ini, `FakeTransport` selalu menyelang-seling
+   * luma-nya sehingga `SignalMonitor` tidak pernah melihat feed "beku", dan
+   * bug webcam-tertutup-overlay lolos dari seluruh suite.
+   */
+  freezeScene(): void {
+    this.frozen = true;
+  }
+
+  /** Hidupkan lagi selang-seling luma. */
+  unfreezeScene(): void {
+    this.frozen = false;
+  }
+
   /** Device yang dicabut saat app sedang jalan. */
   removeDevice(id: string): void {
     this.removed.add(id);
@@ -172,17 +191,27 @@ export class FakeTransport implements CameraTransport {
     // melaporkannya, jalur "device hilang di tengah sesi" tidak pernah teruji.
     return this.specs
       .filter((spec) => !this.removed.has(spec.id))
-      .map((spec) => ({
-        id: spec.id,
-        label: spec.label,
+      .map((spec) => this.toDevice(spec));
+  }
+
+  /** Device yang sedang tersambung, atau `null`. Lihat `CameraTransport`. */
+  currentDevice(): CameraDevice | null {
+    if (!this.connected || this.activeSpec === null) return null;
+    return this.toDevice(this.activeSpec);
+  }
+
+  private toDevice(spec: FakeDeviceSpec): CameraDevice {
+    return {
+      id: spec.id,
+      label: spec.label,
+      source: spec.source,
+      classification: {
         source: spec.source,
-        classification: {
-          source: spec.source,
-          score: 1,
-          matched: ["fake"],
-          confidence: "hint" as const,
-        },
-      }));
+        score: 1,
+        matched: ["fake"],
+        confidence: "hint" as const,
+      },
+    };
   }
 
   async connect(deviceId: string, options: CaptureOptions = {}): Promise<void> {
@@ -312,6 +341,12 @@ export class FakeTransport implements CameraTransport {
       // selalu mengembalikan grid identik akan dituduh **beku** oleh
       // `SignalMonitor` — dan tuduhan itu benar; yang salah adalah feed-nya,
       // bukan pemantau sinyalnya. Feed kamera nyata selalu berubah.
+      //
+      // Kecuali saat `freezeScene()` dipanggil: di situ kita memang ingin
+      // meniru kamera yang menghadap ruangan yang benar-benar tidak berubah,
+      // supaya jalur "webcam dituduh tanpa sinyal" bisa diuji.
+      if (this.frozen) return this.uniformGrid(this.lumaValue);
+
       this.sampleTick += 1;
       return this.uniformGrid(this.lumaValue + (this.sampleTick % 2 === 0 ? 0 : 8));
     };

@@ -288,6 +288,60 @@ test("override mirror tidak menyeberang device", async () => {
   assert.equal(h.session.mirror(), true, "device yang sama tidak menghapus override");
 });
 
+// ── deteksi sinyal: hanya untuk capture card ────────────────────────────
+
+test("webcam dengan adegan statis dan redup tidak pernah dituduh tanpa sinyal", async () => {
+  // Inilah bug yang dilaporkan: pilih webcam bawaan laptop, dan kamera
+  // seolah tidak terbuka. Padahal kameranya hidup — yang salah adalah
+  // `SignalMonitor` (khusus capture card) ikut dipasang di webcam, lalu
+  // ruangan redup (luma di bawah ambang hitam) atau orang yang duduk manis
+  // (frame identik = "beku") dituduh `no-signal`. Akibatnya berlipat: panel
+  // merah menutupi preview, dan countdown ditahan di 0 sehingga tidak ada
+  // satu frame pun yang dijepret.
+  const h = harness({ shotCount: 3 });
+  await h.session.init();
+  await h.session.connect(FAKE_WEBCAM.id);
+
+  h.transport.freezeScene();
+  h.transport.setLuma(4);
+
+  h.session.arm();
+  h.session.begin();
+  await h.settle();
+
+  assert.equal(h.session.getSnapshot().signal, "ok", "webcam tidak boleh masuk jalur sinyal-hilang");
+  assert.equal(h.session.getSnapshot().state, "review", "sesi harus selesai, bukan menggantung");
+  assert.equal(
+    h.session.getSnapshot().frames.filter((id) => id !== null).length,
+    3,
+    "semua slot terisi — bukan 0 frame seperti sebelum diperbaiki",
+  );
+});
+
+test("capture card yang kabelnya dicabut tetap ditahan di countdown", async () => {
+  // Kebalikannya harus tetap berlaku: capture card memang tidak punya sinyal
+  // saat kabel HDMI dicabut, dan frame hitamnya tidak boleh dijepret. Kalau
+  // tes ini ikut hijau dengan pemantau dimatikan, berarti kita memperbaiki
+  // webcam dengan merusak capture card.
+  const h = harness({ spec: FAKE_CAPTURE_CARD, shotCount: 2 });
+  await h.session.init();
+  await h.session.connect(FAKE_CAPTURE_CARD.id);
+  h.transport.finishWarmup();
+
+  h.transport.cutSignal();
+  h.session.arm();
+  h.session.begin();
+  await h.settle();
+
+  assert.equal(h.session.getSnapshot().signal, "no-signal", "capture card tetap dipantau");
+  assert.equal(h.session.getSnapshot().state, "countdown", "ditahan, tidak menjepret frame hitam");
+  assert.equal(
+    h.session.getSnapshot().frames.filter((id) => id !== null).length,
+    0,
+    "tidak ada frame hitam yang tersimpan",
+  );
+});
+
 test("capture card yang belum warm-up memunculkan peringatan, bukan jepretan gagal", async () => {
   const h = harness({ spec: FAKE_CAPTURE_CARD });
   await h.session.init();
@@ -395,9 +449,13 @@ test("frame sesi lama tidak bocor ke sesi baru", async () => {
 // ── sinyal hilang ───────────────────────────────────────────────────────
 
 test("kabel dicabut di tengah countdown: tidak ada frame hitam yang tersimpan", async () => {
-  const h = harness({ shotCount: 1, countdownMs: 1_000 });
+  // Deteksi sinyal hilang itu urusan **capture card** — di situlah kabel HDMI
+  // bisa benar-benar lepas. Webcam bawaan tidak punya kabel untuk dicabut,
+  // jadi mengujinya di sana hanya mengunci perilaku yang salah.
+  const h = harness({ spec: FAKE_CAPTURE_CARD, shotCount: 1, countdownMs: 1_000 });
   await h.session.init();
-  await h.session.connect(FAKE_WEBCAM.id);
+  await h.session.connect(FAKE_CAPTURE_CARD.id);
+  h.transport.finishWarmup();
 
   h.session.arm();
   h.session.begin();
@@ -417,9 +475,10 @@ test("kabel dicabut di tengah countdown: tidak ada frame hitam yang tersimpan", 
 });
 
 test("kabel dipasang lagi: sesi lanjut sendiri tanpa aksi operator", async () => {
-  const h = harness({ shotCount: 1, countdownMs: 1_000 });
+  const h = harness({ spec: FAKE_CAPTURE_CARD, shotCount: 1, countdownMs: 1_000 });
   await h.session.init();
-  await h.session.connect(FAKE_WEBCAM.id);
+  await h.session.connect(FAKE_CAPTURE_CARD.id);
+  h.transport.finishWarmup();
 
   h.session.arm();
   h.session.begin();

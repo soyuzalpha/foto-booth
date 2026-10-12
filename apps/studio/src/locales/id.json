@@ -47,6 +47,7 @@
     "signalOk": "Sinyal OK",
     "noSignal": "Tanpa sinyal",
     "noSignalBody": "Tidak ada sinyal dari kamera. Cek kabel HDMI atau baterai kamera.",
+    "noSignalBodyWebcam": "Kamera berhenti mengirim gambar. Cabut lalu colok ulang kamera, atau pilih kamera lain.",
     "arm": "Siapkan sesi",
     "begin": "Mulai",
     "shootNow": "Jepret sekarang",

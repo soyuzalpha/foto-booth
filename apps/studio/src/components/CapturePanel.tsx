@@ -80,6 +80,10 @@ export default function CapturePanel(): React.JSX.Element {
 
   const currentState = state?.state ?? "idle";
   const signalLost = state?.signal === "no-signal";
+
+  // Pesan "tidak ada sinyal" harus sesuai jenis device: menyuruh operator
+  // memeriksa kabel HDMI pada kamera bawaan laptop itu jelas salah alamat.
+  const deviceSource = capture.devices.find((device) => device.id === deviceId)?.source ?? null;
   const seconds = Math.max(0, Math.ceil((state?.waitRemainingMs ?? 0) / 1000));
   const shotCount = state?.config.shotCount ?? 0;
   const filled = state?.frames.filter((id) => id !== null).length ?? 0;
@@ -141,7 +145,13 @@ export default function CapturePanel(): React.JSX.Element {
               </div>
             )}
 
-            {signalLost && <div className="preview-overlay">{t("capture.noSignalBody")}</div>}
+            {signalLost && (
+              <div className="preview-overlay">
+                {deviceSource === "webcam"
+                  ? t("capture.noSignalBodyWebcam")
+                  : t("capture.noSignalBody")}
+              </div>
+            )}
           </div>
 
           <div className="preview-meta">
