@@ -195,6 +195,120 @@ export const CreateLeadSchema = LeadSchema.omit({ id: true, createdAt: true });
 export type CreateLead = z.infer<typeof CreateLeadSchema>;
 
 /* ------------------------------------------------------------------ *
+ * Fase 5 — upload presigned, OTP, entitlement
+ *
+ * Upload foto TIDAK lewat API (syarat Fase 5): API hanya menandatangani URL,
+ * studio PUT langsung ke bucket. Karena itu `UploadUrlRequest` sengaja tidak
+ * memuat key — key ditentukan server, bukan klien, supaya satu klien tidak bisa
+ * menulis ke prefix album orang lain.
+ * ------------------------------------------------------------------ */
+
+export const UPLOAD_CONTENT_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export type UploadContentType = (typeof UPLOAD_CONTENT_TYPES)[number];
+
+export const UploadUrlRequestSchema = z.object({
+  contentType: z.enum(UPLOAD_CONTENT_TYPES),
+  /** Ukuran berkas, byte. Server menolak yang melebihi `PHOTO_MAX_BYTES`. */
+  bytes: z.number().int().positive(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  /** Nama berkas asli — murni buat tampilan, tidak dipakai menyusun key. */
+  filename: z.string().max(200).optional(),
+});
+export type UploadUrlRequest = z.infer<typeof UploadUrlRequestSchema>;
+
+/**
+ * URL yang ditandatangani. Dua-duanya di-PUT langsung ke bucket:
+ * `uploadUrl` = berkas asli, `thumbUploadUrl` = pratinjau halaman galeri.
+ */
+export const UploadUrlResponseSchema = z.object({
+  photoId: z.string(),
+  uploadUrl: z.string(),
+  thumbUploadUrl: z.string(),
+  key: z.string(),
+  thumbKey: z.string(),
+  /** ISO — setelah ini URL ditolak bucket. */
+  expiresAt: z.string(),
+});
+export type UploadUrlResponse = z.infer<typeof UploadUrlResponseSchema>;
+
+/** Dipanggil studio SETELAH kedua PUT sukses. */
+export const RegisterPhotoSchema = z.object({
+  photoId: z.string().min(1),
+  key: z.string().min(1),
+  thumbKey: z.string().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  bytes: z.number().int().positive(),
+  filename: z.string().max(200).optional(),
+});
+export type RegisterPhoto = z.infer<typeof RegisterPhotoSchema>;
+
+export const CreateGallerySchema = z.object({
+  eventId: z.string().min(1),
+  /** Plaintext HANYA di request; server yang meng-hash (PBKDF2 + salt acak). */
+  password: z.string().min(4).max(128).optional(),
+  /** Umur galeri dalam hari. Kosong = `GALLERY_TTL_DAYS`. */
+  ttlDays: z.number().int().min(1).max(365).optional(),
+});
+export type CreateGallery = z.infer<typeof CreateGallerySchema>;
+
+export const UnlockGallerySchema = z.object({
+  password: z.string().min(1).max(128),
+});
+export type UnlockGallery = z.infer<typeof UnlockGallerySchema>;
+
+/** Balasan `POST /v1/galleries/:id/photos` — metadata yang tersimpan. */
+export const RegisteredPhotoSchema = PhotoSchema;
+export type RegisteredPhoto = z.infer<typeof RegisteredPhotoSchema>;
+
+/* OTP → JWT -------------------------------------------------------- */
+
+export const OtpRequestSchema = z.object({
+  email: z.string().email(),
+});
+export type OtpRequest = z.infer<typeof OtpRequestSchema>;
+
+export const OtpVerifySchema = z.object({
+  email: z.string().email(),
+  /** Enam digit. Sengaja string supaya `007123` tidak kehilangan nol depan. */
+  code: z.string().regex(/^\d{6}$/, "kode harus 6 digit"),
+});
+export type OtpVerify = z.infer<typeof OtpVerifySchema>;
+
+export const SessionSchema = z.object({
+  token: z.string(),
+  email: z.string().email(),
+  expiresAt: z.string(),
+});
+export type Session = z.infer<typeof SessionSchema>;
+
+/** Balasan `POST /v1/auth/otp/request` — tidak pernah memuat kodenya. */
+export const OtpRequestedSchema = z.object({
+  sent: z.literal(true),
+  expiresAt: z.string(),
+});
+export type OtpRequested = z.infer<typeof OtpRequestedSchema>;
+
+/* Entitlement / lisensi -------------------------------------------- */
+
+export const ENTITLEMENT_PLANS = ["trial", "personal", "commercial"] as const;
+export type EntitlementPlan = (typeof ENTITLEMENT_PLANS)[number];
+
+export const EntitlementSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  plan: z.enum(ENTITLEMENT_PLANS),
+  status: z.enum(["active", "expired", "revoked"]),
+  /** Batas galeri aktif sekaligus; `null` = tanpa batas. */
+  maxActiveGalleries: z.number().int().positive().nullable(),
+  issuedAt: z.string(),
+  /** `null` = lisensi tidak pernah kedaluwarsa. */
+  expiresAt: z.string().nullable(),
+});
+export type Entitlement = z.infer<typeof EntitlementSchema>;
+
+/* ------------------------------------------------------------------ *
  * Error
  * ------------------------------------------------------------------ */
 

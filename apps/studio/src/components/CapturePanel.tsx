@@ -6,13 +6,16 @@
  * (kapan boleh jepret, berapa kali retry, kapan berhenti) ada di state machine.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ASPECT_RATIOS } from "../lib/capture/aspectRatio.ts";
+import { useGallery } from "../lib/gallery/galleryContext.ts";
 import { RESOLUTION_PRESETS } from "../lib/transports/resolutions.ts";
 import { deviceBadge } from "../lib/transports/deviceProfile.ts";
 import type { CaptureErrorCode } from "../lib/transports/errors.ts";
+import { framesToIntake } from "../lib/upload/composedToIntake.ts";
+import { makeThumb } from "../lib/upload/makeThumb.ts";
 import { useCaptureSession } from "../lib/useCaptureSession.ts";
 
 /** Nama state di UI. Semua nilai harus ada — kalau state baru ditambah, ini ikut ketahuan. */
@@ -69,6 +72,12 @@ export default function CapturePanel(): React.JSX.Element {
   const { t } = useTranslation();
   const capture = useCaptureSession();
   const { state, session, frames } = capture;
+  const { intake, active } = useGallery();
+
+  // Hasil simpan sesi terakhir. Ditampilkan sebagai pesan, bukan toast: di
+  // kiosk, pesan yang hilang sendiri berarti operator tidak pernah tahu
+  // fotonya tersimpan atau tidak.
+  const [savedNote, setSavedNote] = useState<string | null>(null);
 
   const holderRef = useRef<HTMLDivElement>(null);
   const deviceId = state?.deviceId ?? null;
@@ -106,6 +115,28 @@ export default function CapturePanel(): React.JSX.Element {
   const canAccept = currentState === "review" && filled === shotCount && shotCount > 0;
   const canShoot = currentState === "armed" || currentState === "review";
   const settingsLocked = RUNNING_STATES.has(currentState);
+
+  /**
+   * Terima hasil sesi, lalu simpan: arsip lokal dulu, baru antrian upload.
+   *
+   * `accept()` dipanggil lebih dulu supaya alur sesi tidak tertahan menunggu
+   * disk — operator bisa langsung menyiapkan sesi berikutnya. Frame-nya masih
+   * hidup di sesi (blob tidak dibuang saat accept), jadi urutannya aman.
+   */
+  const onAccept = async (): Promise<void> => {
+    const source = capture.session;
+    capture.accept();
+    if (source === null) return;
+
+    const photos = await framesToIntake(source.frames(), { makeThumb });
+    const summary = await intake(photos);
+
+    if (summary.error !== null) {
+      setSavedNote(t("capture.saveFailed", { message: summary.error }));
+    } else {
+      setSavedNote(t("capture.saved", { count: summary.queued }));
+    }
+  };
 
   return (
     <section className="capture" aria-labelledby="capture-title">
@@ -191,6 +222,7 @@ export default function CapturePanel(): React.JSX.Element {
             <select
               value={deviceId ?? DEVICE_NONE}
               disabled={capture.devices.length === 0}
+              data-testid="capture-device"
               onChange={(event) => {
                 const value = event.target.value;
                 // `""` adalah nilai SAH (device yang belum berizin) — jadi
@@ -270,10 +302,22 @@ export default function CapturePanel(): React.JSX.Element {
 
 
           <div className="field-row">
-            <button className="btn" type="button" disabled={!canArm} onClick={capture.arm}>
+            <button
+              className="btn"
+              type="button"
+              disabled={!canArm}
+              data-testid="capture-arm"
+              onClick={capture.arm}
+            >
               {t("capture.arm")}
             </button>
-            <button className="btn" type="button" disabled={!canBegin} onClick={capture.begin}>
+            <button
+              className="btn"
+              type="button"
+              disabled={!canBegin}
+              data-testid="capture-begin"
+              onClick={capture.begin}
+            >
               {t("capture.begin")}
             </button>
           </div>
@@ -295,9 +339,27 @@ export default function CapturePanel(): React.JSX.Element {
             </button>
           </div>
 
-          <button className="btn" type="button" disabled={!canAccept} onClick={capture.accept}>
+          <button
+            className="btn"
+            type="button"
+            disabled={!canAccept}
+            data-testid="capture-accept"
+            onClick={() => void onAccept()}
+          >
             {t("capture.accept")}
           </button>
+
+          {savedNote !== null && (
+            <p className="note" data-testid="capture-saved-note">
+              {savedNote}
+            </p>
+          )}
+
+          {active === null && (
+            <p className="note" data-testid="capture-no-gallery">
+              {t("capture.noGallery")}
+            </p>
+          )}
         </div>
       </div>
 

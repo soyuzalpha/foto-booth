@@ -13,7 +13,8 @@
     "start": "pnpm --filter @foto-booth/api start",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "test:e2e": "node e2e/phase5-upload.e2e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
@@ -21,6 +22,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.18",
     "globals": "^15.14.0",
+    "playwright": "1.64.0",
     "typescript-eslint": "^8.23.0"
   }
 }

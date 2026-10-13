@@ -23,6 +23,49 @@ import type {
   TransportKind,
 } from "./types.ts";
 
+/**
+ * Gambar palsu yang **benar-benar bisa didekode**.
+ *
+ * Kalau `capture()` mengembalikan byte teks ber-`content-type: image/jpeg`,
+ * `createImageBitmap` gagal → thumbnail tidak pernah dibuat → jalur thumbnail
+ * tidak pernah ikut teruji, dan halaman galeri menunjuk objek yang tidak ada.
+ * Jadi gambar digambar sungguhan di canvas lalu dikodekan ulang jadi JPEG.
+ * Kalau canvas tidak tersedia (Node), jatuh ke byte teks — capture tetap
+ * mengembalikan sesuatu, hanya tidak bisa didekode.
+ */
+async function fakeFrameBlob(
+  payload: string,
+  width: number,
+  height: number,
+): Promise<Blob> {
+  if (typeof document === "undefined") {
+    return new Blob([payload], { type: "image/jpeg" });
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (context === null) return new Blob([payload], { type: "image/jpeg" });
+
+  // Warna diturunkan dari payload supaya tiap jepretan terlihat berbeda.
+  let hash = 0;
+  for (const char of payload) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  context.fillStyle = `hsl(${hash % 360} 60% 45%)`;
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#fff";
+  context.font = "16px sans-serif";
+  context.fillText(payload, 8, 24);
+
+  return await new Promise<Blob>((resolve) => {
+    canvas.toBlob(
+      (result) => resolve(result ?? new Blob([payload], { type: "image/jpeg" })),
+      "image/jpeg",
+      0.8,
+    );
+  });
+}
+
 export interface FakeDeviceSpec {
   id: string;
   label: string;
@@ -321,7 +364,7 @@ export class FakeTransport implements CameraTransport {
 
     return {
       id: this.newId(),
-      blob: new Blob([payload], { type: "image/jpeg" }),
+      blob: await fakeFrameBlob(payload, this.width, this.height),
       width: this.width,
       height: this.height,
       shotIndex,

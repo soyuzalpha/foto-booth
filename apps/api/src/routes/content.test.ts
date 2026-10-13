@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { CONTENT_KINDS, ContentItemSchema } from "@foto-booth/shared";
 
-import { buildApp } from "../app.ts";
+import { makeHarness } from "../testing.ts";
 import { catalogFor } from "./content.ts";
 
 /**
@@ -54,7 +54,8 @@ test("sticker & frame membawa dimensi supaya editor bisa menaruhnya tanpa fetch"
 });
 
 test("GET /v1/content/<kind> mengembalikan katalog yang sama", async () => {
-  const app = await buildApp({ logger: false });
+  const h = await makeHarness();
+  const { app } = h;
   try {
     for (const kind of CONTENT_KINDS) {
       const res = await app.inject({ method: "GET", url: `/v1/content/${kind}` });
@@ -65,16 +66,16 @@ test("GET /v1/content/<kind> mengembalikan katalog yang sama", async () => {
       assert.equal(body.items.length, catalogFor(kind).length);
     }
   } finally {
-    await app.close();
+    await h.close();
   }
 });
 
 test("kategori tidak dikenal → 404", async () => {
-  const app = await buildApp({ logger: false });
+  const h = await makeHarness();
   try {
-    const res = await app.inject({ method: "GET", url: "/v1/content/nope" });
+    const res = await h.app.inject({ method: "GET", url: "/v1/content/nope" });
     assert.equal(res.statusCode, 404);
   } finally {
-    await app.close();
+    await h.close();
   }
 });

@@ -12,7 +12,7 @@
  */
 
 export const DB_NAME = "foto-booth";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const STORE_FRAMES = "frames";
 export const STORE_TEMPLATES = "templates";
@@ -20,8 +20,13 @@ export const STORE_TEMPLATES = "templates";
 export const STORE_CONTENT = "content";
 /** Biner aset konten, dikunci per URL — ini yang bikin konten tampil offline. */
 export const STORE_CONTENT_ASSETS = "contentAssets";
+/** Item antrian upload (metadata saja; blob-nya terpisah). */
+export const STORE_UPLOAD_ITEMS = "uploadItems";
+/** Biner foto yang belum terkirim, dikunci `UploadItem.blobKey`. */
+export const STORE_UPLOAD_BLOBS = "uploadBlobs";
 
 const INDEX_FRAME_SESSION = "sessionId";
+const INDEX_UPLOAD_GALLERY = "galleryId";
 
 /** Ubah `IDBRequest` jadi Promise, tanpa menelan error aslinya. */
 export function promisify<T>(request: IDBRequest<T>): Promise<T> {
@@ -52,6 +57,15 @@ function upgrade(db: IDBDatabase): void {
 
   if (!db.objectStoreNames.contains(STORE_CONTENT_ASSETS)) {
     db.createObjectStore(STORE_CONTENT_ASSETS, { keyPath: "url" });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_UPLOAD_ITEMS)) {
+    const items = db.createObjectStore(STORE_UPLOAD_ITEMS, { keyPath: "id" });
+    items.createIndex(INDEX_UPLOAD_GALLERY, "galleryId", { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_UPLOAD_BLOBS)) {
+    db.createObjectStore(STORE_UPLOAD_BLOBS, { keyPath: "key" });
   }
 }
 

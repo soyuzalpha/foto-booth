@@ -20,6 +20,7 @@ import { createFrameStore } from "./capture/frameStore.ts";
 import type { SessionConfig } from "./capture/stateMachine.ts";
 import { DEFAULT_SESSION_CONFIG, normalizeConfig } from "./capture/stateMachine.ts";
 import type { CaptureError } from "./transports/errors.ts";
+import { demoSpecs } from "./transports/demoMode.ts";
 import { FAKE_DEVICES, FakeTransport } from "./transports/fakeTransport.ts";
 import type { CameraDevice, CameraTransport } from "./transports/types.ts";
 import { UvcTransport } from "./transports/uvcTransport.ts";
@@ -96,11 +97,20 @@ function loadConfig(): SessionConfig {
 /**
  * Pilih transport sesuai kemampuan browser.
  *
- * `getUserMedia` butuh secure context (HTTPS atau localhost). Kalau tidak ada,
- * aplikasi jangan mati: `FakeTransport` dipakai supaya operator masih bisa
- * mencoba alur sesi dan menilai tata letaknya.
+ * Urutannya menentukan:
+ *
+ *   1. `?fake=...` menang lebih dulu — mode demo harus bisa dipaksa walau
+ *      browser punya `getUserMedia` (mesin pengembang, CI, harness e2e);
+ *   2. `getUserMedia` butuh secure context (HTTPS atau localhost). Kalau tidak
+ *      ada, aplikasi jangan mati: `FakeTransport` dipakai supaya operator masih
+ *      bisa mencoba alur sesi dan menilai tata letaknya.
  */
 function pickTransport(): { transport: CameraTransport; demo: boolean } {
+  const search = typeof location === "undefined" ? "" : location.search;
+  const demo = demoSpecs(search);
+
+  if (demo !== null) return { transport: new FakeTransport({ specs: demo }), demo: true };
+
   const mediaDevices = typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
 
   if (mediaDevices !== undefined && typeof mediaDevices.getUserMedia === "function") {

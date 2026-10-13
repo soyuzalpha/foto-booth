@@ -4,11 +4,14 @@ import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
+import GalleryPanel from "./components/GalleryPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
 import KioskPanel from "./components/KioskPanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
+import UploadStatusPanel from "./components/UploadStatusPanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
 import { useContentSync } from "./lib/content/useContentSync.ts";
+import { GalleryProvider } from "./lib/gallery/GalleryProvider.tsx";
 import { setLocale } from "./lib/i18n";
 import { useKiosk } from "./lib/kiosk/useKiosk.ts";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
@@ -203,10 +206,20 @@ function StatusPanel(): React.JSX.Element {
 }
 
 export default function App(): React.JSX.Element {
+  // Provider membungkus semuanya: panel capture, panel galeri, dan status
+  // upload membaca galeri aktif + sesi operator yang sama.
+  return (
+    <GalleryProvider>
+      <StudioApp />
+    </GalleryProvider>
+  );
+}
+
+function StudioApp(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
-  const [tab, setTab] = useState<"capture" | "template" | "kiosk">("capture");
+  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "kiosk">("capture");
   const kiosk = useKiosk();
 
   return (
@@ -254,6 +267,16 @@ export default function App(): React.JSX.Element {
             {t("tabs.template")}
           </button>
           <button
+            className={`tab${tab === "gallery" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "gallery"}
+            data-testid="tab-gallery"
+            onClick={() => setTab("gallery")}
+          >
+            {t("tabs.gallery")}
+          </button>
+          <button
             className={`tab${tab === "kiosk" ? " is-active" : ""}`}
             type="button"
             role="tab"
@@ -266,11 +289,22 @@ export default function App(): React.JSX.Element {
         </div>
 
         {tab === "capture" ? (
-          <CapturePanel />
+          <>
+            <CapturePanel />
+            <details className="status-panel" open>
+              <summary>
+                {t("upload.title")}
+                <span className="muted"> — {t("upload.pending")}</span>
+              </summary>
+              <UploadStatusPanel />
+            </details>
+          </>
         ) : tab === "template" ? (
           <div data-testid="panel-template">
             <TemplatePanel />
           </div>
+        ) : tab === "gallery" ? (
+          <GalleryPanel />
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}

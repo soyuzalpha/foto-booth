@@ -1,16 +1,49 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+/**
+ * Halaman galeri tamu — satu-satunya bagian publik dari aplikasi.
+ *
+ * Yang penting di sini bukan tampilannya, tapi tiga hal yang gampang salah:
+ *
+ *   1. **Meta OG benar.** Link ini disebar lewat WhatsApp/Instagram; kalau
+ *      `og:image` tidak ada atau menunjuk URL yang butuh cookie, preview-nya
+ *      kosong dan orang tidak mengkliknya.
+ *   2. **Bucket tetap privat.** Foto tidak pernah punya URL publik langsung —
+ *      byte-nya diproksi lewat server ini. Bucket Garage-nya hanya mendengarkan
+ *      di `127.0.0.1`, jadi memproksi bukan kemalasan: itu memang satu-satunya
+ *      jalan yang tidak membuka bucket ke internet.
+ *   3. **Galeri berpassword benar-benar tertutup.** Bukan menyembunyikan
+ *      tautan: byte foto tidak dikirim sebelum password diverifikasi.
+ *
+ * Halaman ini dirender sebagai HTML dari server (bukan SPA) supaya bisa dibuka
+ * tanpa JavaScript dan bisa dibaca crawler preview link.
+ */
 
-import type { FastifyInstance } from "fastify";
+import { Readable } from "node:stream";
+
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import {
-  GalleryPublicSchema,
   GALLERY_BASE_PATH,
   GALLERY_TTL_DAYS,
-  type GalleryPublic,
+  UnlockGallerySchema,
+  type Gallery,
 } from "@foto-booth/shared";
 
-import { STORAGE_DIR } from "../paths.ts";
+import { signJwt, verifyJwt } from "../jwt.ts";
+import { getObject } from "../objectStore.ts";
+import { verifySecret } from "../secrets.ts";
+import {
+  getEvent,
+  getGalleryByHash,
+  getGalleryPassword,
+  listPhotos,
+} from "../store.ts";
+import type { ServerContext } from "../context.ts";
+import { buildZip, type ZipEntry } from "../zip.ts";
+
+/** Umur cookie buka-kunci. Cukup untuk sesi berbagi foto, tidak setahun. */
+const UNLOCK_TTL_SECONDS = 12 * 3600;
+
+const UNLOCK_COOKIE = "fb_unlock";
 
 function escapeHtml(value: string): string {
   return value
@@ -21,24 +54,45 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+/* ---- Cookie (tanpa dependensi) ------------------------------------ */
+
+function readCookie(request: FastifyRequest, name: string): string | null {
+  const header = request.headers.cookie;
+  if (header === undefined) return null;
+
+  for (const part of header.split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
 /**
- * Fase 0: galeri dibaca dari `storage/galleries/<hash>.json`.
+ * Token buka-kunci ditandatangani dengan rahasia server.
  *
- * Postgres + S3 + upload presigned masuk Fase 5; yang penting sekarang bentuk
- * halaman + meta OG-nya sudah benar, karena itulah bagian yang dipakai
- * WhatsApp/Instagram saat link dibagikan.
+ * Cookie tidak menyimpan password dan tidak menyimpan flag "sudah login" yang
+ * bisa dikarang klien: tanpa signature yang cocok, cookie diabaikan.
  */
-async function loadGallery(hash: string): Promise<GalleryPublic | null> {
-  if (!/^[a-zA-Z0-9_-]{4,64}$/.test(hash)) return null;
+function unlockToken(gallery: Gallery, ctx: ServerContext): string {
+  return signJwt(`gallery:${gallery.hash}`, ctx.jwtSecret, {
+    expiresInSeconds: UNLOCK_TTL_SECONDS,
+    now: ctx.now(),
+  }).token;
+}
+
+function isUnlocked(request: FastifyRequest, gallery: Gallery, ctx: ServerContext): boolean {
+  const token = readCookie(request, UNLOCK_COOKIE);
+  if (token === null) return false;
 
   try {
-    const raw = await readFile(join(STORAGE_DIR, "galleries", `${hash}.json`), "utf8");
-    const parsed = GalleryPublicSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
+    const claims = verifyJwt(token, ctx.jwtSecret, { now: ctx.now() });
+    return claims.sub === `gallery:${gallery.hash}`;
   } catch {
-    return null;
+    return false;
   }
 }
+
+/* ---- Kerangka halaman --------------------------------------------- */
 
 function shell(title: string, body: string, head = ""): string {
   return `<!doctype html>
@@ -46,6 +100,7 @@ function shell(title: string, body: string, head = ""): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 ${head}
 <style>
@@ -54,7 +109,7 @@ ${head}
   body { margin:0; background:var(--paper); color:var(--ink);
          font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
          display:flex; min-height:100vh; align-items:center; justify-content:center; padding:24px; }
-  .card { max-width:640px; width:100%; background:#fff; border:4px solid var(--ink);
+  .card { max-width:720px; width:100%; background:#fff; border:4px solid var(--ink);
           box-shadow:12px 12px 0 var(--ink); padding:32px; }
   h1 { margin:0 0 8px; font-size:clamp(28px,7vw,44px); line-height:1; letter-spacing:-.02em; }
   p  { margin:0 0 20px; font-size:16px; line-height:1.5; }
@@ -62,59 +117,266 @@ ${head}
            padding:4px 12px; font-weight:800; font-size:13px; text-transform:uppercase;
            letter-spacing:.06em; margin-bottom:16px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:14px; margin:20px 0 0; }
-  .grid img { width:100%; aspect-ratio:3/4; object-fit:cover; border:3px solid var(--ink); background:#eee; }
-  a.btn { display:inline-block; background:var(--pink); color:var(--ink); border:3px solid var(--ink);
-          box-shadow:5px 5px 0 var(--ink); padding:12px 22px; font-weight:800; text-decoration:none; }
+  .grid a { display:block; }
+  .grid img { width:100%; aspect-ratio:3/4; object-fit:cover; border:3px solid var(--ink); background:#eee; display:block; }
+  a.btn, button.btn { display:inline-block; background:var(--pink); color:var(--ink); border:3px solid var(--ink);
+          box-shadow:5px 5px 0 var(--ink); padding:12px 22px; font-weight:800; text-decoration:none;
+          font-size:16px; cursor:pointer; font-family:inherit; }
+  form { display:flex; gap:10px; flex-wrap:wrap; }
+  input[type=password] { flex:1 1 200px; border:3px solid var(--ink); padding:12px; font-size:16px; font-family:inherit; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:24px; }
+  .note { font-size:13px; color:#555; margin:16px 0 0; }
 </style>
 </head>
 <body><main class="card">${body}</main></body>
 </html>`;
 }
 
-export async function galleryRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Params: { hash: string } }>(
-    `${GALLERY_BASE_PATH}:hash`,
-    async (request, reply) => {
-      const gallery = await loadGallery(request.params.hash);
-      const publicUrl = `${request.protocol}://${request.host}${request.url}`;
-
-      if (!gallery) {
-        return reply
-          .status(404)
-          .type("text/html; charset=utf-8")
-          .send(
-            shell(
-              "Galeri tidak ditemukan",
-              `<span class="badge">404</span>
-               <h1>Galeri tidak ditemukan</h1>
-               <p>Link-nya salah, atau galeri sudah kedaluwarsa. Galeri tamu otomatis
-                  dihapus ${GALLERY_TTL_DAYS} hari setelah dibuat.</p>
-               <a class="btn" href="/">Kembali ke beranda</a>`,
-            ),
-          );
-      }
-
-      const ogHead = `<meta property="og:type" content="website">
-<meta property="og:title" content="${escapeHtml(gallery.event.name)}">
-<meta property="og:description" content="Foto dari ${escapeHtml(gallery.event.date)} — ambil & bagikan.">
-<meta property="og:image" content="${escapeHtml(new URL(`${GALLERY_BASE_PATH}${gallery.hash}/og.png`, publicUrl).href)}">
-<meta property="og:url" content="${escapeHtml(publicUrl)}">
-<meta name="twitter:card" content="summary_large_image">`;
-
-      const photos = gallery.photos
-        .map((photo) => `<img src="${escapeHtml(photo.thumbUrl)}" alt="" loading="lazy">`)
-        .join("");
-
-      return reply.type("text/html; charset=utf-8").send(
-        shell(
-          gallery.event.name,
-          `<span class="badge">Galeri tamu</span>
-           <h1>${escapeHtml(gallery.event.name)}</h1>
-           <p>${escapeHtml(gallery.event.date)}${gallery.event.hashtag ? ` · ${escapeHtml(gallery.event.hashtag)}` : ""}</p>
-           <div class="grid">${photos}</div>`,
-          ogHead,
-        ),
-      );
-    },
+function errorPage(status: number, title: string, message: string): string {
+  return shell(
+    title,
+    `<span class="badge">${status}</span>
+     <h1>${escapeHtml(title)}</h1>
+     <p>${message}</p>
+     <a class="btn" href="/">Kembali ke beranda</a>`,
   );
 }
+
+const NOT_FOUND_HTML = errorPage(
+  404,
+  "Galeri tidak ditemukan",
+  `Link-nya salah, atau galeri sudah kedaluwarsa. Galeri tamu otomatis dihapus ${GALLERY_TTL_DAYS} hari setelah dibuat.`,
+);
+
+function passwordPage(hash: string, failed: boolean): string {
+  return shell(
+    "Galeri terkunci",
+    `<span class="badge">Terkunci</span>
+     <h1>Galeri ini pakai password</h1>
+     <p>Masukkan password dari operator untuk melihat fotonya.</p>
+     ${failed ? `<p style="color:#c00;font-weight:700">Password salah. Coba lagi.</p>` : ""}
+     <form method="post" action="${escapeHtml(`${GALLERY_BASE_PATH}${hash}/unlock`)}">
+       <input type="password" name="password" placeholder="Password" autofocus required>
+       <button class="btn" type="submit">Buka</button>
+     </form>`,
+  );
+}
+
+/* ---- Bantu -------------------------------------------------------- */
+
+async function loadGallery(hash: string, ctx: ServerContext): Promise<Gallery | null> {
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(hash)) return null;
+  return getGalleryByHash(ctx.db, hash);
+}
+
+function absolute(request: FastifyRequest, path: string): string {
+  return `${request.protocol}://${request.host}${path}`;
+}
+
+/** Galeri berpassword yang belum dibuka kunci → `true`. */
+function isLocked(request: FastifyRequest, gallery: Gallery, ctx: ServerContext): boolean {
+  const password = getGalleryPassword(ctx.db, gallery.id);
+  if (password === null || password.hash === null) return false;
+  return !isUnlocked(request, gallery, ctx);
+}
+
+function toWebStream(body: ReadableStream<Uint8Array>): Readable {
+  return Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]);
+}
+
+/** Nama folder di dalam ZIP — huruf/angka/dash saja, sisanya jadi `-`. */
+function sanitizeFolder(name: string): string {
+  const cleaned = name
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+  return cleaned === "" ? "galeri" : cleaned;
+}
+
+function extFromContentType(contentType: string): string {
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("webp")) return "webp";
+  return "jpg";
+}
+
+/* ---- Rute --------------------------------------------------------- */
+
+export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): Promise<void> {
+  /* Halaman utama album. */
+  app.get<{ Params: { hash: string }; Querystring: { salah?: string } }>(
+    `${GALLERY_BASE_PATH}:hash`,
+    async (request, reply) => {
+      const gallery = await loadGallery(request.params.hash, ctx);
+      if (gallery === null) return reply.status(404).type("text/html; charset=utf-8").send(NOT_FOUND_HTML);
+
+      if (isLocked(request, gallery, ctx)) {
+        return reply
+          .status(401)
+          .type("text/html; charset=utf-8")
+          .send(passwordPage(gallery.hash, request.query.salah === "1"));
+      }
+
+      const event = getEvent(ctx.db, gallery.eventId);
+      const photos = listPhotos(ctx.db, gallery.id);
+      const base = absolute(request, `${GALLERY_BASE_PATH}${gallery.hash}`);
+
+      const firstPhoto = photos[0];
+      const ogHead = [
+        `<meta property="og:type" content="website">`,
+        `<meta property="og:title" content="${escapeHtml(event?.name ?? "Galeri foto")}">`,
+        `<meta property="og:description" content="${escapeHtml(
+          event === null ? "Ambil & bagikan fotonya." : `Foto dari ${event.date} — ambil & bagikan.`,
+        )}">`,
+        `<meta property="og:url" content="${escapeHtml(base)}">`,
+        // Thumb dipakai sebagai OG image: tanpa foto, lebih jujur tidak
+        // mengirim og:image sama sekali daripada menunjuk gambar kosong.
+        ...(firstPhoto === undefined
+          ? []
+          : [`<meta property="og:image" content="${escapeHtml(`${base}/og.png`)}">`]),
+        `<meta name="twitter:card" content="summary_large_image">`,
+      ].join("\n");
+
+      const cards = photos
+        .map(
+          (photo) =>
+            `<a href="${escapeHtml(`${base}/photo/${photo.id}`)}" target="_blank" rel="noopener">` +
+            `<img src="${escapeHtml(`${base}/photo/${photo.id}?thumb=1`)}" alt="" loading="lazy"></a>`,
+        )
+        .join("");
+
+      const body = `
+        <span class="badge">Galeri tamu</span>
+        <h1>${escapeHtml(event?.name ?? "Galeri foto")}</h1>
+        <p>${escapeHtml(event?.date ?? "")}${event?.hashtag ? ` · ${escapeHtml(event.hashtag)}` : ""}</p>
+        ${
+          photos.length === 0
+            ? `<p>Belum ada foto di galeri ini.</p>`
+            : `<div class="grid">${cards}</div>`
+        }
+        ${
+          photos.length === 0
+            ? ""
+            : `<div class="row"><a class="btn" href="${escapeHtml(`${base}/zip`)}">Unduh semua (${photos.length})</a></div>`
+        }
+        <p class="note">Galeri ini dihapus otomatis ${GALLERY_TTL_DAYS} hari setelah dibuat.</p>`;
+
+      return reply.type("text/html; charset=utf-8").send(shell(event?.name ?? "Galeri foto", body, ogHead));
+    },
+  );
+
+  /* Buka kunci dengan password. */
+  app.post<{ Params: { hash: string }; Body: { password?: string } }>(
+    `${GALLERY_BASE_PATH}:hash/unlock`,
+    async (request, reply) => {
+      const gallery = await loadGallery(request.params.hash, ctx);
+      if (gallery === null) return reply.status(404).type("text/html; charset=utf-8").send(NOT_FOUND_HTML);
+
+      const parsed = UnlockGallerySchema.safeParse(request.body ?? {});
+      const stored = getGalleryPassword(ctx.db, gallery.id);
+      const ok =
+        parsed.success && stored !== null && (await verifySecret(parsed.data.password, stored));
+
+      if (!ok) {
+        // Redirect, bukan 401: menekan F5 tidak memunculkan dialog "kirim ulang
+        // formulir" di browser.
+        return reply.redirect(`${GALLERY_BASE_PATH}${gallery.hash}?salah=1`, 303);
+      }
+
+      reply.header(
+        "set-cookie",
+        `${UNLOCK_COOKIE}=${encodeURIComponent(unlockToken(gallery, ctx))}; ` +
+          `Path=${GALLERY_BASE_PATH}${gallery.hash}; Max-Age=${UNLOCK_TTL_SECONDS}; ` +
+          `HttpOnly; SameSite=Lax`,
+      );
+      return reply.redirect(`${GALLERY_BASE_PATH}${gallery.hash}`, 303);
+    },
+  );
+
+  /* Byte foto. Diproksi supaya bucket tetap privat. */
+  app.get<{ Params: { hash: string; photoId: string }; Querystring: { thumb?: string } }>(
+    `${GALLERY_BASE_PATH}:hash/photo/:photoId`,
+    async (request, reply) => {
+      const gallery = await loadGallery(request.params.hash, ctx);
+      if (gallery === null) {
+        return reply.status(404).send({ error: "not_found", message: "galeri tidak ditemukan", statusCode: 404 });
+      }
+      if (isLocked(request, gallery, ctx)) {
+        return reply.status(401).send({ error: "locked", message: "galeri terkunci", statusCode: 401 });
+      }
+
+      const photo = listPhotos(ctx.db, gallery.id).find((row) => row.id === request.params.photoId);
+      if (photo === undefined) {
+        return reply.status(404).send({ error: "not_found", message: "foto tidak ditemukan", statusCode: 404 });
+      }
+
+      return sendObject(app, reply, ctx, request.query.thumb === "1" ? photo.thumbKey : photo.key);
+    },
+  );
+
+  /* Gambar OG: thumb foto pertama, diproksi dengan URL bersih tanpa query. */
+  app.get<{ Params: { hash: string } }>(`${GALLERY_BASE_PATH}:hash/og.png`, async (request, reply) => {
+    const gallery = await loadGallery(request.params.hash, ctx);
+    if (gallery === null) return reply.status(404).send();
+    if (isLocked(request, gallery, ctx)) return reply.status(401).send();
+
+    const first = listPhotos(ctx.db, gallery.id)[0];
+    if (first === undefined) return reply.status(404).send();
+
+    return sendObject(app, reply, ctx, first.thumbKey, "public, max-age=3600");
+  });
+
+  /* Unduh semua sebagai ZIP. */
+  app.get<{ Params: { hash: string } }>(`${GALLERY_BASE_PATH}:hash/zip`, async (request, reply) => {
+    const gallery = await loadGallery(request.params.hash, ctx);
+    if (gallery === null) {
+      return reply.status(404).send({ error: "not_found", message: "galeri tidak ditemukan", statusCode: 404 });
+    }
+    if (isLocked(request, gallery, ctx)) {
+      return reply.status(401).send({ error: "locked", message: "galeri terkunci", statusCode: 401 });
+    }
+
+    const event = getEvent(ctx.db, gallery.eventId);
+    const photos = listPhotos(ctx.db, gallery.id);
+    const folder = sanitizeFolder(event?.name ?? gallery.hash);
+
+    // Entri diambil berurutan dari bucket, jadi album besar tidak pernah utuh
+    // di memori — hanya satu foto pada satu waktu.
+    async function* entries(): AsyncGenerator<ZipEntry> {
+      for (const [index, photo] of photos.entries()) {
+        const object = await getObject(ctx.s3, photo.key, { fetch: ctx.fetch, now: ctx.now });
+        const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+        const name = `${folder}/${String(index + 1).padStart(3, "0")}-${photo.id}.${extFromContentType(object.contentType)}`;
+        yield { name, bytes };
+      }
+    }
+
+    reply.type("application/zip");
+    reply.header("content-disposition", `attachment; filename="${folder}.zip"`);
+    return reply.send(buildZip(entries(), { now: ctx.now }));
+  });
+}
+
+/** Ambil objek dari bucket dan teruskan ke tamu. */
+async function sendObject(
+  app: FastifyInstance,
+  reply: FastifyReply,
+  ctx: ServerContext,
+  key: string,
+  cacheControl = "private, max-age=3600",
+): Promise<FastifyReply> {
+  try {
+    const object = await getObject(ctx.s3, key, { fetch: ctx.fetch, now: ctx.now });
+    reply.type(object.contentType);
+    if (object.contentLength !== null) reply.header("content-length", String(object.contentLength));
+    reply.header("cache-control", cacheControl);
+    return await reply.send(toWebStream(object.body));
+  } catch (error) {
+    app.log.error({ err: error, key }, "gagal mengambil objek foto");
+    return reply.status(502).send({ error: "object_store_error", message: "foto tidak bisa diambil", statusCode: 502 });
+  }
+}
+
+/** Diekspor supaya tes bisa memeriksa bentuk halaman tanpa HTTP. */
+export { sanitizeFolder, passwordPage, NOT_FOUND_HTML };

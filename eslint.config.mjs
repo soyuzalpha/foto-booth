@@ -19,9 +19,18 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
-  // Node: API + shared + konfigurasi root + skrip docs.
+  // Node: API + shared + konfigurasi root + skrip docs + harness e2e.
+  // Harness e2e berjalan di Node tapi juga mengevaluasi kode di dalam halaman
+  // (lihat `page.evaluate`), jadi keduanya butuh global node **dan** browser.
   {
-    files: ["apps/api/**/*.ts", "packages/shared/**/*.ts", "*.ts", "*.mjs", "docs/**/*.mjs"],
+    files: [
+      "apps/api/**/*.ts",
+      "packages/shared/**/*.ts",
+      "*.ts",
+      "*.mjs",
+      "docs/**/*.mjs",
+      "e2e/**/*.mjs",
+    ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },
@@ -40,6 +49,16 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+    },
+  },
+
+  // Service worker studio: global-nya sendiri (`self`, `clients`), bukan
+  // `window`. File ini di-`importScripts` dari SW hasil build, jadi tidak
+  // lewat bundler dan tidak punya tipe apa pun.
+  {
+    files: ["apps/studio/public/**/*.js"],
+    languageOptions: {
+      globals: { ...globals.serviceworker },
     },
   },
 

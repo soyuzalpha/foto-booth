@@ -423,12 +423,22 @@ pnpm --filter @foto-booth/studio test
 pnpm lint && pnpm -r typecheck && pnpm -r build
 pnpm --filter @foto-booth/api test
 
-# alur tamu end-to-end (script, bukan curl manual)
-node ~/.hermes/profiles/vesta/cache/scratch/fb-gallery-e2e.mjs
+# alur tamu end-to-end di browser sungguhan (harness di dalam repo)
+# prasyarat: API jalan di port uji, `apps/studio/dist` sudah dibuild,
+# dan OTP_DEV_MODE=1 supaya kode OTP bisa dibaca dari balasan `otp/request`.
+FB_E2E_BASE=http://127.0.0.1:5080 pnpm test:e2e
 
 # tunnel publik
 curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
 ```
+
+> **Prasyarat deploy — CORS bucket.** Jalur upload langsung studio→bucket
+> **butuh CORS di bucket storage** (Garage). CORS ini **tidak ada di kode repo**;
+> ia dipasang ke bucket lewat S3 API (`put_bucket_cors`, mis. boto3). Bucket
+> Garage baru **tidak** punya CORS sama sekali (`NoSuchCORSConfiguration`) →
+> tanpa langkah ini browser memblokir PUT dan **semua upload gagal** di produksi.
+> Origin yang harus diizinkan: origin studio yang dipakai kiosk (mis.
+> `https://foto.soyuz.my.id`), bukan `*`.
 
 - [ ] **Tutup tab saat offline → buka lagi → antrian masih ada** (persisten)
 - [ ] **Online kembali → upload jalan otomatis, tanpa aksi user** (bukti: foto muncul di `/a/:hash`)

@@ -18,6 +18,27 @@ export const GALLERY_BASE_PATH = "/a/";
 /** TTL galeri tamu: foto & objek S3 dihapus otomatis setelah ini. */
 export const GALLERY_TTL_DAYS = 30;
 
+/** Batas ukuran satu foto (byte). 25 MB cukup untuk JPEG 6000×4000. */
+export const PHOTO_MAX_BYTES = 25 * 1024 * 1024;
+
+/** Umur URL presigned (detik). Cukup lama untuk upload di 4G, pendek untuk aman. */
+export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
+
+/** Umur kode OTP (menit). */
+export const OTP_TTL_MINUTES = 10;
+
+/** Berapa kali salah kode sebelum OTP dibuang. */
+export const OTP_MAX_ATTEMPTS = 5;
+
+/** Umur token sesi (jam). */
+export const SESSION_TTL_HOURS = 24 * 7;
+
+/** Batas percobaan upload satu foto sebelum menyerah. */
+export const UPLOAD_MAX_ATTEMPTS = 5;
+
+/** Berapa foto diupload paralel. Kiosk sering di jaringan lemah. */
+export const UPLOAD_CONCURRENCY = 2;
+
 /** Kategori konten yang bisa diunduh/di-cache studio app. */
 export const CONTENT_KINDS = [
   "starters",

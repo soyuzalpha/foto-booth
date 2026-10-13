@@ -45,6 +45,9 @@ export default defineConfig({
         navigateFallback: "/studio/index.html",
         cleanupOutdatedCaches: true,
         clientsClaim: true,
+        // Handler Background Sync untuk antrian upload. Path-nya relatif
+        // terhadap lokasi SW (`/studio/sw.js`), bukan terhadap root situs.
+        importScripts: ["./sync-sw.js"],
       },
 
       // Service worker aktif juga saat `pnpm dev`, biar mode offline bisa
