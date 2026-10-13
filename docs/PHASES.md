@@ -40,7 +40,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **3** | Print layout + print browser + download | M | `[x]` **selesai** |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[x]` **selesai** |
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[x]` **selesai** |
-| 6 | Green screen + adjustments + face enhance | L | `[ ]` |
+| 6 | Green screen + adjustments + face enhance | L | `[x]` **selesai** — 19/19 e2e; GFPGAN ~340 MB belum diunggah |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
 | 9 | Leads + analytics + branding | M | `[ ]` |
