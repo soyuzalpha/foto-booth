@@ -17,8 +17,11 @@ apps/studio/dist-probe/
 # service worker dev (dibuat vite-plugin-pwa saat `dev`) — artefak, bukan sumber
 apps/studio/dev-dist/
 
-# runtime data (lives on the host, mounted into the container)
-storage/
+# runtime data (lives on the host, mounted into the container).
+# Di-anchor ke akar repo (`/storage/`) — pola tanpa anchor juga cocok dengan
+# direktori sumber bernama sama (mis. `apps/studio/src/lib/storage/`), dan itu
+# pernah membuat modul sumber tidak ikut ter-commit.
+/storage/
 
 # env & secrets
 .env
