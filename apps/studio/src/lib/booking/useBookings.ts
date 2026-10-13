@@ -202,6 +202,10 @@ export function useBookings(options: UseBookingsOptions): BookingsState & Bookin
 
   useEffect(() => {
     void controller.refresh();
+    // Ringkasan okupansi ikut dimuat saat tab dibuka. Tanpa ini kartunya
+    // menampilkan "belum ada data" padahal datanya ada — terbaca seperti
+    // laporan kosong, bukan seperti belum dimuat.
+    void controller.refreshReport();
   }, [controller]);
 
   return useMemo(
