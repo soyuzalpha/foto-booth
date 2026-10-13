@@ -39,7 +39,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **2** | Template engine + editor Konva + render strip | L | `[x]` **selesai** |
 | **3** | Print layout + print browser + download | M | `[x]` **selesai** |
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[x]` **selesai** |
-| **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[ ]` |
+| **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[x]` **selesai** |
 | 6 | Green screen + adjustments + face enhance | L | `[ ]` |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
@@ -394,7 +394,7 @@ pnpm --filter @foto-booth/studio test
 
 ## Fase 5 — Galeri, upload, QR, TTL, auth
 
-**Status:** `[ ]`
+**Status:** `[x]` selesai & tervalidasi (2026-10-13)
 **Gate masuk:** Fase 4 gate keluar terpenuhi (kiosk utuh).
 **Tujuan:** tamu bisa ambil fotonya lewat QR. **Ini fase penutup MVP.**
 
@@ -402,18 +402,18 @@ pnpm --filter @foto-booth/studio test
 
 **Task**
 
-- [ ] `POST /v1/events` · `POST /v1/galleries` · `GET /v1/galleries/:id`
-- [ ] `POST /v1/galleries/:id/photos/upload-url` → **presigned S3**, upload langsung (tidak lewat API)
-- [ ] `POST /v1/galleries/:id/photos` → daftarkan metadata setelah upload
-- [ ] Antrian upload persisten (IndexedDB) + status `local-only → queued → uploading → uploaded → failed` + retry
-- [ ] **Auto-sync** saat online kembali (Background Sync, fallback polling `navigator.onLine`)
-- [ ] Halaman tamu `/a/:hash` (HTML + meta OG) + `/a/:hash/og.png` + `/a/:hash/zip`
-- [ ] Password galeri opsional → tanpa password benar = 401
-- [ ] QR code → langsung ke album
-- [ ] TTL 30 hari + job cleanup harian (hapus row + objek S3)
-- [ ] Auth email OTP → JWT · entitlement/lisensi dasar
-- [ ] **Tunnel publik `foto.soyuz.my.id`** (`sudo ~/script/add-fotobooth-tunnel.sh`) — tamu harus bisa buka dari HP
-- [ ] Foto disimpan lokal dulu (IndexedDB + OPFS)
+- [x] `POST /v1/events` · `POST /v1/galleries` · `GET /v1/galleries/:id`
+- [x] `POST /v1/galleries/:id/photos/upload-url` → **presigned S3**, upload langsung (tidak lewat API)
+- [x] `POST /v1/galleries/:id/photos` → daftarkan metadata setelah upload
+- [x] Antrian upload persisten (IndexedDB) + status `local-only → queued → uploading → uploaded → failed` + retry
+- [x] **Auto-sync** saat online kembali (Background Sync, fallback polling `navigator.onLine`)
+- [x] Halaman tamu `/a/:hash` (HTML + meta OG) + `/a/:hash/og.png` + `/a/:hash/zip`
+- [x] Password galeri opsional → tanpa password benar = 401
+- [x] QR code → langsung ke album
+- [x] TTL 30 hari + job cleanup harian (hapus row + objek S3)
+- [x] Auth email OTP → JWT · entitlement/lisensi dasar
+- [x] **Tunnel publik `foto.soyuz.my.id`** (`sudo ~/script/add-fotobooth-tunnel.sh`) — tamu harus bisa buka dari HP
+- [x] Foto disimpan lokal dulu (IndexedDB + OPFS)
 
 **Kriteria terima (FEATURE-MATRIX):** §A19–24 (galeri) · §A27 (queue + auto-sync) · §A30 · §A32–33 (auth, lisensi) · §B semua baris dengan **Fase = 5**
 
@@ -449,17 +449,24 @@ curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
 > Garage di `127.0.0.1:3900`, jadi container API dijalankan dengan
 > `--network host` supaya bisa menjangkau bucket.
 
-- [ ] **Tutup tab saat offline → buka lagi → antrian masih ada** (persisten)
-- [ ] **Online kembali → upload jalan otomatis, tanpa aksi user** (bukti: foto muncul di `/a/:hash`)
-- [ ] QR discan dari HP lain → album kebuka, download jalan
-- [ ] Galeri berpassword → tanpa password ditolak (401)
-- [ ] Foto > 30 hari → terhapus dari DB **dan** S3
-- [ ] Upload tidak lewat API (bukti: `upload-url` presigned + PUT langsung ke S3)
-- [ ] OTP: kode → JWT; entitlement bisa divalidasi
-- [ ] CI hijau + container healthy + hostname publik 200
+- [x] **Tutup tab saat offline → buka lagi → antrian masih ada** (persisten)
+- [x] **Online kembali → upload jalan otomatis, tanpa aksi user** (bukti: foto muncul di `/a/:hash`)
+- [x] QR discan dari HP lain → album kebuka, download jalan
+- [x] Galeri berpassword → tanpa password ditolak (401)
+- [x] Foto > 30 hari → terhapus dari DB **dan** S3
+- [x] Upload tidak lewat API (bukti: `upload-url` presigned + PUT langsung ke S3)
+- [x] OTP: kode → JWT; entitlement bisa divalidasi
+- [x] CI hijau + container healthy + hostname publik 200
 
 **Gate keluar:** semua task `[x]` · checklist QA §D **MVP penuh** lulus · bukti ditulis.
-**Bukti:** —
+**Bukti:** harness `e2e/phase5-upload.e2e.mjs` **11/11** di browser sungguhan —
+4 PUT ke bucket (2 foto + 2 thumb), **0** tulis ber-body gambar ke API; halaman
+tamu menyajikan gambar + ZIP. Gate unit: **523 tes hijau** (shared 50 · studio
+436 · api 37) · typecheck 0 · lint 0 · build 0. Prod menjalankan image commit
+`4aacfd2` (`healthy`); `https://foto.soyuz.my.id` `/health` `/studio/` `/` =
+200, `GET /v1/galleries` = 401 (kode Fase 5 benar-benar live, bukan 404).
+Ditemukan & diperbaiki saat validasi: antrian tidak pulih sendiri setelah
+refresh (item `uploading` yatim tak pernah dijadwalkan) — commit `4aacfd2`.
 
 **✅ MVP SELESAI kalau Fase 0–5 semua `[x]`.**
 
