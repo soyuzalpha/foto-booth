@@ -8,6 +8,8 @@ import { APP_NAME, APP_VERSION, STUDIO_BASE_PATH } from "@foto-booth/shared";
 import { CONTENT_DIR, LANDING_DIR, STUDIO_DIST_DIR } from "./paths.ts";
 import type { ServerContext } from "./context.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { bookingPageRoutes } from "./routes/booking-pages.ts";
+import { bookingRoutes } from "./routes/booking.ts";
 import { contentRoutes } from "./routes/content.ts";
 import { galleryRoutes } from "./routes/gallery.ts";
 import { galleryOperatorRoutes } from "./routes/galleries.ts";
@@ -40,6 +42,11 @@ export async function buildApp(
   // jelas mana yang internal.
   await galleryOperatorRoutes(app, ctx);
   await galleryRoutes(app, ctx);
+  // Booking: API JSON dulu, baru halaman HTML-nya. Halaman `/booking/s/:token`
+  // dan rute API `/v1/booking/status/:token` tidak bertabrakan (prefix beda),
+  // tapi mendaftarkan API lebih dulu menjaga keduanya jelas terpisah.
+  await bookingRoutes(app, ctx);
+  await bookingPageRoutes(app, ctx);
   await contentRoutes(app);
 
   // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.

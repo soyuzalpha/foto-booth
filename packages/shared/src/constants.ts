@@ -59,3 +59,34 @@ export const DEFAULT_LOCALE: Locale = "id";
 export function isContentKind(value: string): value is ContentKind {
   return (CONTENT_KINDS as readonly string[]).includes(value);
 }
+
+/* ------------------------------------------------------------------ *
+ * Booking (Fase 11)
+ * ------------------------------------------------------------------ */
+
+/** Halaman form booking publik & halaman status token. */
+export const BOOKING_BASE_PATH = "/booking";
+
+/** Halaman status satu booking: `/booking/s/<token>`. */
+export const BOOKING_STATUS_PATH = `${BOOKING_BASE_PATH}/s/`;
+
+/**
+ * Panjang token status, dalam byte acak (base64url → 22 karakter).
+ *
+ * 16 byte = 128 bit. Token ini satu-satunya yang melindungi data pemesan, dan
+ * URL-nya dikirim lewat WhatsApp — jadi harus tidak bisa ditebak, tapi tetap
+ * cukup pendek untuk diketik ulang kalau perlu.
+ */
+export const BOOKING_TOKEN_BYTES = 16;
+
+/** Bentuk token yang diterima route — menolak apa pun yang bukan base64url. */
+export const BOOKING_TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+/** Batas permintaan booking dari satu IP. */
+export const BOOKING_RATE_LIMIT = 5;
+
+/** Jendela pembatas booking (milidetik) — satu jam. */
+export const BOOKING_RATE_WINDOW_MS = 60 * 60 * 1000;
+
+/** Panjang maksimum alasan tolak/batal yang ditampilkan ke tamu. */
+export const BOOKING_REASON_MAX = 500;

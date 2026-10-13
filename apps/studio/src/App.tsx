@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
+import BookingPanel from "./components/BookingPanel.tsx";
 import DebugPanel from "./components/DebugPanel.tsx";
 import GalleryPanel from "./components/GalleryPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
@@ -220,7 +221,7 @@ function StudioApp(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
-  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "kiosk">("capture");
+  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "booking" | "kiosk">("capture");
   const kiosk = useKiosk();
 
   return (
@@ -278,6 +279,16 @@ function StudioApp(): React.JSX.Element {
             {t("tabs.gallery")}
           </button>
           <button
+            className={`tab${tab === "booking" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "booking"}
+            data-testid="tab-booking"
+            onClick={() => setTab("booking")}
+          >
+            {t("tabs.booking")}
+          </button>
+          <button
             className={`tab${tab === "kiosk" ? " is-active" : ""}`}
             type="button"
             role="tab"
@@ -306,6 +317,8 @@ function StudioApp(): React.JSX.Element {
           </div>
         ) : tab === "gallery" ? (
           <GalleryPanel />
+        ) : tab === "booking" ? (
+          <BookingPanel />
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}

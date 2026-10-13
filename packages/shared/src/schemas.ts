@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { BOOKING_STATUSES, DEPOSIT_STATUSES } from "./booking.ts";
 import { CONTENT_KINDS } from "./constants.ts";
 import { TEMPLATE_DPI_DEFAULT, TEMPLATE_MIN_EXPORT_DPI } from "./template.ts";
 
@@ -307,6 +308,245 @@ export const EntitlementSchema = z.object({
   expiresAt: z.string().nullable(),
 });
 export type Entitlement = z.infer<typeof EntitlementSchema>;
+
+/* ------------------------------------------------------------------ *
+ * Fase 11 — Booking & reservasi
+ *
+ * Bentuk data di sini **sudah final** untuk Fase 11 walau pembayarannya belum
+ * tersambung: `paymentProvider` dan `depositStatus` ada sejak sekarang supaya
+ * menyambungkan QRIS (Fase 10) nanti tidak perlu migrasi skema.
+ *
+ * Snapshot harga: `Booking` menyimpan `packageName`, `priceIdr`, dan
+ * `durationMinutes` **saat booking dibuat**, bukan menunjuk paket hidup. Kalau
+ * operator menaikkan harga, booking lama tidak ikut berubah — itu yang benar,
+ * karena klien menyetujui harga yang dia lihat.
+ * ------------------------------------------------------------------ */
+
+export const BookingPackageSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1).max(120),
+    description: z.string().max(500).optional(),
+    durationMinutes: z.number().int().min(15).max(24 * 60),
+    /** Harga penuh sesi (rupiah). */
+    priceIdr: z.number().int().nonnegative(),
+    /** Deposit yang diminta untuk mengunci slot (rupiah). 0 = tanpa deposit. */
+    depositIdr: z.number().int().nonnegative(),
+    active: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .refine((value) => value.depositIdr <= value.priceIdr, {
+    message: "deposit tidak boleh melebihi harga paket",
+    path: ["depositIdr"],
+  });
+export type BookingPackage = z.infer<typeof BookingPackageSchema>;
+
+export const CreateBookingPackageSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(500).optional(),
+    durationMinutes: z.number().int().min(15).max(24 * 60),
+    priceIdr: z.number().int().nonnegative(),
+    depositIdr: z.number().int().nonnegative().default(0),
+    active: z.boolean().default(true),
+  })
+  .refine((value) => value.depositIdr <= value.priceIdr, {
+    message: "deposit tidak boleh melebihi harga paket",
+    path: ["depositIdr"],
+  });
+export type CreateBookingPackage = z.infer<typeof CreateBookingPackageSchema>;
+
+/**
+ * Update paket — semua field opsional.
+ *
+ * Batas `deposit ≤ harga` **tidak** diperiksa di sini: `partial()` tidak bisa
+ * memvalidasi lintas field yang boleh jadi tidak dikirim sama sekali. Route
+ * yang menggabungkan dulu dengan nilai lama, lalu memeriksa hasil gabungannya.
+ */
+export const UpdateBookingPackageSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().max(500).optional(),
+  durationMinutes: z.number().int().min(15).max(24 * 60).optional(),
+  priceIdr: z.number().int().nonnegative().optional(),
+  depositIdr: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional(),
+});
+export type UpdateBookingPackage = z.infer<typeof UpdateBookingPackageSchema>;
+
+const HHMM = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Jam buka satu hari. `close` harus setelah `open`.
+ *
+ * Tipe hasilnya sengaja **tidak** diekspor ulang di sini: bentuknya sama persis
+ * dengan `DayHours` di `booking.ts`, dan `index.ts` meng-`export *` kedua modul
+ * — mengekspor dua tipe bernama sama bikin impor jadi ambigu. Konsumen memakai
+ * `DayHours` dari `booking.ts`; skema ini cuma memvalidasi bentuknya.
+ */
+export const DayHoursSchema = z
+  .object({
+    /** 0 = Minggu … 6 = Sabtu. */
+    weekday: z.number().int().min(0).max(6),
+    open: z.string().regex(HHMM, "jam buka harus HH:MM"),
+    close: z.string().regex(HHMM, "jam tutup harus HH:MM"),
+  })
+  .refine((value) => value.close > value.open, {
+    message: "jam tutup harus setelah jam buka",
+    path: ["close"],
+  });
+
+/**
+ * Provider pembayaran yang dikenal.
+ *
+ * `none` = belum ada gateway sama sekali (kondisi Fase 11 sekarang). `manual`
+ * = operator menandai deposit masuk sendiri. `qris` disiapkan untuk Fase 10
+ * dan **belum diimplementasikan** — memilihnya sekarang ditolak route.
+ */
+export const PAYMENT_PROVIDERS = ["none", "manual", "qris"] as const;
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
+
+export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export const BookingSettingsSchema = z.object({
+  hours: z.array(DayHoursSchema).max(7),
+  /** Jeda bersih-bersih antar sesi (menit). */
+  bufferMinutes: z.number().int().min(0).max(240),
+  /** Jarak antar awal slot; `null` = sepanjang durasi paket. */
+  slotStepMinutes: z.number().int().min(5).max(240).nullable(),
+  /** Booking terdekat yang masih diterima, dari sekarang (jam). */
+  minNoticeHours: z.number().int().min(0).max(24 * 30),
+  /** Seberapa jauh ke depan kalender dibuka (hari). */
+  maxAdvanceDays: z.number().int().min(1).max(730),
+  /** Offset zona operator dalam menit (WIB = -420). */
+  timezoneOffsetMinutes: z.number().int().min(-840).max(840),
+  /** Tanggal tutup (libur, acara lain) — `YYYY-MM-DD`. */
+  closedDates: z.array(z.string().regex(DATE_ONLY)).max(365),
+  paymentProvider: z.enum(PAYMENT_PROVIDERS),
+  /** Kalau true, slot baru hanya dikunci setelah deposit masuk. */
+  requireDeposit: z.boolean(),
+});
+export type BookingSettings = z.infer<typeof BookingSettingsSchema>;
+
+export const UpdateBookingSettingsSchema = BookingSettingsSchema.partial();
+export type UpdateBookingSettings = z.infer<typeof UpdateBookingSettingsSchema>;
+
+/**
+ * Setelan awal sebelum operator menyentuhnya.
+ *
+ * Zona default WIB (UTC+7 → offset −420) karena aplikasi ini dipakai di
+ * Indonesia; jam buka 09:00–21:00 tiap hari kecuali Senin, buffer 30 menit
+ * (waktu bersih-bersih antar sesi), dan `paymentProvider: "none"` — kondisi
+ * jujur Fase 11, belum ada gateway.
+ */
+export const DEFAULT_BOOKING_SETTINGS: BookingSettings = {
+  hours: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
+    weekday,
+    open: "09:00",
+    close: "21:00",
+  })),
+  bufferMinutes: 30,
+  slotStepMinutes: null,
+  minNoticeHours: 24,
+  maxAdvanceDays: 180,
+  timezoneOffsetMinutes: -420,
+  closedDates: [],
+  paymentProvider: "none",
+  requireDeposit: false,
+};
+
+/** Body `POST /v1/booking/requests` — dari form publik. */
+export const BookingRequestSchema = z.object({
+  packageId: z.string().min(1),
+  name: z.string().min(2).max(120),
+  email: z.string().email().max(200),
+  phone: z.string().min(6).max(32),
+  start: z
+    .string()
+    .min(1)
+    .refine((value) => !Number.isNaN(Date.parse(value)), "waktu mulai tidak valid"),
+  notes: z.string().max(1000).optional(),
+  /** Persetujuan simpan data (UU PDP). Wajib `true`. */
+  consent: z.literal(true),
+  /**
+   * Honeypot. Form asli tidak punya field ini; bot mengisinya. Route membalas
+   * sukses palsu tanpa menyimpan apa pun — bukan 400, karena 400 memberi tahu
+   * bot bahwa jebakannya terdeteksi.
+   */
+  website: z.string().max(200).optional(),
+});
+export type BookingRequest = z.infer<typeof BookingRequestSchema>;
+
+export const BookingSchema = z.object({
+  id: z.string(),
+  /** Bagian URL halaman status: `/booking/<token>`. Rahasia, tanpa login. */
+  token: z.string(),
+  packageId: z.string(),
+  packageName: z.string(),
+  name: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  /** Instant UTC ISO. */
+  start: z.string(),
+  end: z.string(),
+  durationMinutes: z.number().int().positive(),
+  priceIdr: z.number().int().nonnegative(),
+  depositIdr: z.number().int().nonnegative(),
+  depositStatus: z.enum(DEPOSIT_STATUSES),
+  status: z.enum(BOOKING_STATUSES),
+  notes: z.string().optional(),
+  /** Alasan tolak/batal — dikirim ke klien di halaman status. */
+  reason: z.string().optional(),
+  /** Event studio yang dibuat saat booking disetujui; null selama belum. */
+  eventId: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Booking = z.infer<typeof BookingSchema>;
+
+/** Yang boleh dilihat tamu lewat token: tanpa `id` internal & alasan internal. */
+export const BookingPublicSchema = BookingSchema.omit({ id: true, reason: true });
+export type BookingPublic = z.infer<typeof BookingPublicSchema>;
+
+export const BookingSlotSchema = z.object({
+  start: z.string(),
+  end: z.string(),
+  /** Jam dinding zona operator, mis. `"14:00–15:00"`. */
+  label: z.string(),
+  available: z.boolean(),
+});
+export type BookingSlot = z.infer<typeof BookingSlotSchema>;
+
+export const BookingAvailabilitySchema = z.object({
+  date: z.string(),
+  timezoneOffsetMinutes: z.number().int(),
+  slots: z.array(BookingSlotSchema),
+});
+export type BookingAvailability = z.infer<typeof BookingAvailabilitySchema>;
+
+/** Status yang boleh di-set operator. `requested` bukan — itu keadaan awal. */
+export const BOOKING_OPERATOR_STATUSES = ["approved", "rejected", "cancelled", "completed"] as const;
+export type BookingOperatorStatus = (typeof BOOKING_OPERATOR_STATUSES)[number];
+
+export const UpdateBookingStatusSchema = z.object({
+  status: z.enum(BOOKING_OPERATOR_STATUSES),
+  reason: z.string().max(500).optional(),
+});
+export type UpdateBookingStatus = z.infer<typeof UpdateBookingStatusSchema>;
+
+export const RescheduleBookingSchema = z.object({
+  start: z
+    .string()
+    .min(1)
+    .refine((value) => !Number.isNaN(Date.parse(value)), "waktu mulai tidak valid"),
+  reason: z.string().max(500).optional(),
+});
+export type RescheduleBooking = z.infer<typeof RescheduleBookingSchema>;
+
+export const CancelBookingSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+export type CancelBooking = z.infer<typeof CancelBookingSchema>;
 
 /* ------------------------------------------------------------------ *
  * Error

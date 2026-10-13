@@ -11,6 +11,11 @@
  */
 
 import type {
+  Booking,
+  BookingPackage,
+  BookingSettings,
+  BookingStatus,
+  DepositStatus,
   Entitlement,
   EntitlementPlan,
   Event,
@@ -68,6 +73,19 @@ export function getEvent(db: Db, id: string): Event | null {
 
 export function listEvents(db: Db): Event[] {
   return db.prepare("SELECT * FROM events ORDER BY created_at DESC").all().map(toEvent);
+}
+
+/**
+ * Geser tanggal sebuah event.
+ *
+ * Dipakai saat booking yang sudah disetujui di-reschedule: event di studio harus
+ * ikut pindah hari, kalau tidak operator akan mencari klien di tanggal lama.
+ * Sengaja hanya `date` — nama/hashtag yang sudah disunting operator tidak boleh
+ * ditimpa.
+ */
+export function updateEventDate(db: Db, id: string, date: string): Event | null {
+  const result = db.prepare("UPDATE events SET date = ? WHERE id = ?").run(date, id);
+  return result.changes === 0 ? null : getEvent(db, id);
 }
 
 /* ------------------------------------------------------------------ *
@@ -369,4 +387,348 @@ export function entitlementAllowsNewGallery(
     return { allowed: false, reason: "lisensi kedaluwarsa" };
   }
   return { allowed: true, reason: null };
+}
+
+/* ------------------------------------------------------------------ *
+ * Booking — paket (Fase 11)
+ * ------------------------------------------------------------------ */
+
+function bool(value: unknown): boolean {
+  return value === 1 || value === true || value === "1";
+}
+
+function toBookingPackage(raw: Record<string, unknown>): BookingPackage {
+  const pkg: BookingPackage = {
+    id: str(raw.id),
+    name: str(raw.name),
+    durationMinutes: num(raw.duration_minutes),
+    priceIdr: num(raw.price_idr),
+    depositIdr: num(raw.deposit_idr),
+    active: bool(raw.active),
+    createdAt: str(raw.created_at),
+    updatedAt: str(raw.updated_at),
+  };
+  const description = raw.description;
+  if (typeof description === "string" && description !== "") pkg.description = description;
+  return pkg;
+}
+
+export interface BookingPackageRow {
+  name: string;
+  description?: string | undefined;
+  durationMinutes: number;
+  priceIdr: number;
+  depositIdr: number;
+  active: boolean;
+}
+
+export function insertBookingPackage(
+  db: Db,
+  id: string,
+  row: BookingPackageRow,
+  now: string,
+): BookingPackage {
+  db.prepare(
+    `INSERT INTO booking_packages
+       (id, name, description, duration_minutes, price_idr, deposit_idr, active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.name,
+    row.description ?? null,
+    row.durationMinutes,
+    row.priceIdr,
+    row.depositIdr,
+    row.active ? 1 : 0,
+    now,
+    now,
+  );
+  return {
+    id,
+    name: row.name,
+    ...(row.description === undefined ? {} : { description: row.description }),
+    durationMinutes: row.durationMinutes,
+    priceIdr: row.priceIdr,
+    depositIdr: row.depositIdr,
+    active: row.active,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Ubah paket. Hanya field yang dikirim yang ditulis.
+ *
+ * Paket sengaja **tidak** di-`DELETE`: booking lama menyimpan `package_id`, dan
+ * menghapus paket akan memutus jejaknya. Operator menonaktifkan (`active=0`)
+ * supaya paket berhenti ditawarkan tapi riwayat tetap terbaca.
+ */
+export function updateBookingPackage(
+  db: Db,
+  id: string,
+  patch: Partial<BookingPackageRow>,
+  now: string,
+): BookingPackage | null {
+  const current = getBookingPackage(db, id);
+  if (current === null) return null;
+
+  const next: BookingPackageRow = {
+    name: patch.name ?? current.name,
+    description: patch.description ?? current.description,
+    durationMinutes: patch.durationMinutes ?? current.durationMinutes,
+    priceIdr: patch.priceIdr ?? current.priceIdr,
+    depositIdr: patch.depositIdr ?? current.depositIdr,
+    active: patch.active ?? current.active,
+  };
+
+  db.prepare(
+    `UPDATE booking_packages SET
+       name = ?, description = ?, duration_minutes = ?, price_idr = ?, deposit_idr = ?, active = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    next.name,
+    next.description ?? null,
+    next.durationMinutes,
+    next.priceIdr,
+    next.depositIdr,
+    next.active ? 1 : 0,
+    now,
+    id,
+  );
+
+  return getBookingPackage(db, id);
+}
+
+export function getBookingPackage(db: Db, id: string): BookingPackage | null {
+  const raw = db.prepare("SELECT * FROM booking_packages WHERE id = ?").get(id);
+  return raw === undefined ? null : toBookingPackage(raw);
+}
+
+/** Urut harga menaik — urutan yang sama dengan yang dilihat tamu di form. */
+export function listBookingPackages(db: Db, activeOnly = false): BookingPackage[] {
+  const sql = activeOnly
+    ? "SELECT * FROM booking_packages WHERE active = 1 ORDER BY price_idr ASC, name ASC"
+    : "SELECT * FROM booking_packages ORDER BY price_idr ASC, name ASC";
+  return db.prepare(sql).all().map(toBookingPackage);
+}
+
+/* ------------------------------------------------------------------ *
+ * Booking — reservasi (Fase 11)
+ * ------------------------------------------------------------------ */
+
+function toBooking(raw: Record<string, unknown>): Booking {
+  const booking: Booking = {
+    id: str(raw.id),
+    token: str(raw.token),
+    packageId: str(raw.package_id),
+    packageName: str(raw.package_name),
+    name: str(raw.name),
+    email: str(raw.email),
+    phone: str(raw.phone),
+    start: str(raw.start),
+    end: str(raw.end),
+    durationMinutes: num(raw.duration_minutes),
+    priceIdr: num(raw.price_idr),
+    depositIdr: num(raw.deposit_idr),
+    depositStatus: str(raw.deposit_status) as DepositStatus,
+    status: str(raw.status) as BookingStatus,
+    createdAt: str(raw.created_at),
+    updatedAt: str(raw.updated_at),
+  };
+  if (typeof raw.notes === "string" && raw.notes !== "") booking.notes = raw.notes;
+  if (typeof raw.reason === "string" && raw.reason !== "") booking.reason = raw.reason;
+  booking.eventId = typeof raw.event_id === "string" && raw.event_id !== "" ? raw.event_id : null;
+  return booking;
+}
+
+export interface BookingRow {
+  token: string;
+  packageId: string;
+  packageName: string;
+  name: string;
+  email: string;
+  phone: string;
+  start: string;
+  end: string;
+  durationMinutes: number;
+  priceIdr: number;
+  depositIdr: number;
+  status: BookingStatus;
+  notes?: string | undefined;
+}
+
+export function insertBooking(db: Db, id: string, row: BookingRow, now: string): Booking {
+  db.prepare(
+    `INSERT INTO bookings
+       (id, token, package_id, package_name, name, email, phone, start, end,
+        duration_minutes, price_idr, deposit_idr, deposit_status, status, notes, reason,
+        created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, NULL, ?, ?)`,
+  ).run(
+    id,
+    row.token,
+    row.packageId,
+    row.packageName,
+    row.name,
+    row.email,
+    row.phone,
+    row.start,
+    row.end,
+    row.durationMinutes,
+    row.priceIdr,
+    row.depositIdr,
+    row.status,
+    row.notes ?? null,
+    now,
+    now,
+  );
+  return getBooking(db, id)!;
+}
+
+export function getBooking(db: Db, id: string): Booking | null {
+  const raw = db.prepare("SELECT * FROM bookings WHERE id = ?").get(id);
+  return raw === undefined ? null : toBooking(raw);
+}
+
+/**
+ * Cari lewat token publik. Token ada di URL halaman status, jadi harus unik dan
+ * tidak menebak-nebak — bandingkan persis, bukan `LIKE`.
+ */
+export function getBookingByToken(db: Db, token: string): Booking | null {
+  const raw = db.prepare("SELECT * FROM bookings WHERE token = ?").get(token);
+  return raw === undefined ? null : toBooking(raw);
+}
+
+export interface BookingFilter {
+  /** Batas bawah `start` (ISO, inklusif). */
+  from?: string | undefined;
+  /** Batas atas `start` (ISO, eksklusif). */
+  to?: string | undefined;
+  status?: BookingStatus | undefined;
+  email?: string | undefined;
+  limit?: number | undefined;
+}
+
+export function listBookings(db: Db, filter: BookingFilter = {}): Booking[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.from !== undefined) {
+    where.push("start >= ?");
+    params.push(filter.from);
+  }
+  if (filter.to !== undefined) {
+    where.push("start < ?");
+    params.push(filter.to);
+  }
+  if (filter.status !== undefined) {
+    where.push("status = ?");
+    params.push(filter.status);
+  }
+  if (filter.email !== undefined) {
+    where.push("email = ?");
+    params.push(filter.email);
+  }
+
+  const sql = `SELECT * FROM bookings
+    ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY start ASC
+    LIMIT ?`;
+  params.push(filter.limit ?? 500);
+
+  return db
+    .prepare(sql)
+    .all(...params)
+    .map(toBooking);
+}
+
+/**
+ * Booking yang **mengunci** slot: `requested` dan `approved`.
+ *
+ * `requested` ikut dikunci walau belum disetujui. Kalau tidak, dua orang bisa
+ * sama-sama meminta jam 14:00 dan operator baru tahu bentroknya saat menyetujui
+ * yang kedua — tamu pertama sudah keburu diberi tahu "tersedia".
+ */
+export const SLOT_HOLDING_STATUSES: readonly BookingStatus[] = ["requested", "approved"];
+
+export function listBookingsInRange(db: Db, from: string, to: string): Booking[] {
+  return db
+    .prepare(
+      `SELECT * FROM bookings
+       WHERE status IN ('requested', 'approved') AND start < ? AND end > ?
+       ORDER BY start ASC`,
+    )
+    .all(to, from)
+    .map(toBooking);
+}
+
+export interface BookingStatusPatch {
+  status?: BookingStatus | undefined;
+  reason?: string | null | undefined;
+  depositStatus?: DepositStatus | undefined;
+  start?: string | undefined;
+  end?: string | undefined;
+  durationMinutes?: number | undefined;
+  eventId?: string | null | undefined;
+}
+
+export function updateBooking(db: Db, id: string, patch: BookingStatusPatch, now: string): Booking | null {
+  const current = getBooking(db, id);
+  if (current === null) return null;
+
+  db.prepare(
+    `UPDATE bookings SET
+       status = ?, reason = ?, deposit_status = ?, start = ?, end = ?, duration_minutes = ?,
+       event_id = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    patch.status ?? current.status,
+    patch.reason === undefined ? (current.reason ?? null) : patch.reason,
+    patch.depositStatus ?? current.depositStatus,
+    patch.start ?? current.start,
+    patch.end ?? current.end,
+    patch.durationMinutes ?? current.durationMinutes,
+    patch.eventId === undefined ? (current.eventId ?? null) : patch.eventId,
+    now,
+    id,
+  );
+
+  return getBooking(db, id);
+}
+
+export function deleteBooking(db: Db, id: string): number {
+  return Number(db.prepare("DELETE FROM bookings WHERE id = ?").run(id).changes);
+}
+
+export function countBookings(db: Db): number {
+  return num(db.prepare("SELECT COUNT(*) AS n FROM bookings").get()?.n);
+}
+
+/* ------------------------------------------------------------------ *
+ * Booking — setelan (Fase 11)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Setelan disimpan sebagai satu baris JSON, bukan kolom-kolom terpisah.
+ *
+ * Bentuknya (jam buka, tanggal tutup, buffer) adalah satu kesatuan yang selalu
+ * dibaca dan ditulis utuh; memecahnya jadi belasan kolom hanya menambah
+ * migrasi setiap kali ada field baru tanpa manfaat nyata di skala satu rumah.
+ * Validasi tetap lewat Zod di route, jadi JSON rusak tidak pernah lolos masuk.
+ */
+export function getBookingSettings(db: Db): BookingSettings | null {
+  const raw = db.prepare("SELECT json FROM booking_settings WHERE id = 1").get();
+  if (raw === undefined) return null;
+  try {
+    return JSON.parse(str(raw.json)) as BookingSettings;
+  } catch {
+    return null;
+  }
+}
+
+export function saveBookingSettings(db: Db, settings: BookingSettings, now: string): void {
+  db.prepare(
+    `INSERT INTO booking_settings (id, json, updated_at) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
+  ).run(JSON.stringify(settings), now);
 }

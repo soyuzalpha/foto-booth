@@ -4,3 +4,4 @@ export * from "./template.ts";
 export * from "./print.ts";
 export * from "./storage.ts";
 export * from "./uploadQueue.ts";
+export * from "./booking.ts";

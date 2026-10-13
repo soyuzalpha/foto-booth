@@ -118,6 +118,7 @@
     "capture": "Ambil foto",
     "template": "Editor template",
     "gallery": "Galeri & upload",
+    "booking": "Booking & reservasi",
     "kiosk": "Mode kiosk"
   },
   "template": {
@@ -301,5 +302,88 @@
   },
   "locale": {
     "label": "Bahasa"
+  },
+  "booking": {
+    "title": "Booking & reservasi",
+    "signedOut": "Masuk sebagai operator di tab Galeri & upload dulu. Sesi dipakai bersama, jadi sekali masuk semua tab ikut.",
+    "loading": "Memuat…",
+    "refresh": "Muat ulang",
+    "saving": "Menyimpan…",
+    "footerNote": "Pembayaran masih di mode tanpa gateway. Deposit dicatat manual oleh operator; koneksi QRIS/Midtrans/Xendit menyusul di fase terpisah.",
+    "report": {
+      "title": "Ringkasan okupansi",
+      "empty": "Belum ada data untuk periode ini.",
+      "requested": "Permintaan menunggu",
+      "booked": "Booking terkunci",
+      "hours": "Jam terpakai",
+      "revenue": "Nilai terkunci"
+    },
+    "pending": {
+      "title": "Perlu ditinjau",
+      "note": "Permintaan yang belum diputuskan. Setujui untuk mengunci slot, atau tolak dengan alasan."
+    },
+    "list": {
+      "title": "Daftar booking",
+      "empty": "Belum ada booking masuk."
+    },
+    "field": {
+      "when": "Waktu",
+      "package": "Paket",
+      "contact": "Kontak",
+      "deposit": "Deposit",
+      "reason": "Catatan"
+    },
+    "status": {
+      "requested": "Menunggu",
+      "approved": "Disetujui",
+      "rejected": "Ditolak",
+      "cancelled": "Dibatalkan",
+      "completed": "Selesai"
+    },
+    "deposit": {
+      "unpaid": "Belum dibayar",
+      "paid": "Dibayar",
+      "waived": "Dibebaskan"
+    },
+    "action": {
+      "approve": "Setujui",
+      "complete": "Tandai selesai",
+      "reject": "Tolak",
+      "rejectPrompt": "Alasan penolakan (boleh dikosongkan):",
+      "cancel": "Batalkan",
+      "cancelConfirm": "Batalkan booking ini? Slot akan dilepas kembali.",
+      "reschedule": "Geser waktu",
+      "newTime": "Waktu baru",
+      "saveTime": "Simpan waktu",
+      "markPaid": "Tandai deposit lunas"
+    },
+    "packages": {
+      "title": "Paket & harga",
+      "empty": "Belum ada paket. Buat satu di bawah.",
+      "active": "Aktif",
+      "inactive": "Nonaktif",
+      "detail": "{{minutes}} menit · {{price}} · deposit {{deposit}}",
+      "createTitle": "Tambah paket",
+      "name": "Nama paket",
+      "duration": "Durasi (menit)",
+      "price": "Harga (Rp)",
+      "deposit": "Deposit (Rp)",
+      "create": "Tambah paket",
+      "creating": "Menambah…",
+      "depositTooBig": "Deposit tidak boleh lebih besar dari harga paket."
+    },
+    "settings": {
+      "title": "Setelan booking",
+      "note": "Jeda antar sesi, batas pemberitahuan minimum, dan seberapa jauh tamu boleh memesan.",
+      "buffer": "Jeda antar sesi (menit)",
+      "notice": "Pemberitahuan minimum (jam)",
+      "advance": "Maks. hari ke depan",
+      "provider": "Penyedia pembayaran",
+      "providerNone": "Tanpa gateway (deposit manual)",
+      "providerManual": "Transfer manual dicatat operator",
+      "providerNote": "Hanya mode manual yang tersedia. Opsi gateway otomatis muncul di fase pembayaran.",
+      "requireDeposit": "Wajibkan deposit sebelum slot dikunci",
+      "save": "Simpan setelan"
+    }
   }
 }

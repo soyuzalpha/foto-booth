@@ -89,6 +89,65 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    id: 2,
+    name: "booking",
+    sql: `
+      CREATE TABLE booking_packages (
+        id               TEXT PRIMARY KEY,
+        name             TEXT NOT NULL,
+        description      TEXT,
+        duration_minutes INTEGER NOT NULL,
+        price_idr        INTEGER NOT NULL,
+        deposit_idr      INTEGER NOT NULL DEFAULT 0,
+        active           INTEGER NOT NULL DEFAULT 1,
+        created_at       TEXT NOT NULL,
+        updated_at       TEXT NOT NULL
+      );
+      CREATE INDEX idx_booking_packages_active ON booking_packages(active);
+
+      CREATE TABLE bookings (
+        id               TEXT PRIMARY KEY,
+        token            TEXT NOT NULL UNIQUE,
+        package_id       TEXT NOT NULL,
+        package_name     TEXT NOT NULL,
+        name             TEXT NOT NULL,
+        email            TEXT NOT NULL,
+        phone            TEXT NOT NULL,
+        start            TEXT NOT NULL,
+        end              TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        price_idr        INTEGER NOT NULL,
+        deposit_idr      INTEGER NOT NULL DEFAULT 0,
+        deposit_status   TEXT NOT NULL DEFAULT 'unpaid',
+        status           TEXT NOT NULL,
+        notes            TEXT,
+        reason           TEXT,
+        created_at       TEXT NOT NULL,
+        updated_at       TEXT NOT NULL
+      );
+      CREATE INDEX idx_bookings_start  ON bookings(start);
+      CREATE INDEX idx_bookings_status ON bookings(status);
+      CREATE INDEX idx_bookings_email  ON bookings(email);
+
+      CREATE TABLE booking_settings (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        json       TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    id: 3,
+    name: "booking-event-link",
+    // Booking yang disetujui jadi event di studio, supaya hari-H tidak perlu
+    // input ulang. Kolomnya nullable: booking lama (dan yang masih `requested`)
+    // memang belum punya event. `ON DELETE SET NULL` karena menghapus event
+    // tidak boleh menghapus riwayat booking.
+    sql: `
+      ALTER TABLE bookings ADD COLUMN event_id TEXT REFERENCES events(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

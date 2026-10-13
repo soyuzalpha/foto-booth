@@ -45,7 +45,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
 | 9 | Leads + analytics + branding | M | `[ ]` |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
-| 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[ ]` |
+| 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
 | 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
 
@@ -584,20 +584,22 @@ operator saat siap (tidak ikut git).
 
 ## Fase 11 — Booking & reservasi
 
-**Status:** `[ ]`
-**Gate masuk:** Fase 10 gate keluar terpenuhi (lisensi + payment QRIS jalan — deposit pakai jalur yang sama).
+**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13). **Belum bisa ditutup** (`[x]`) karena Fase 7–10 belum jalan, dan dua dependensi kerasnya masih stub: deposit QRIS (Fase 10) dan reminder email/WA (Fase 9). Payment gateway sengaja **belum dikonekkan** atas permintaan pemilik.
+**Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 10 gate keluar belum terpenuhi (lisensi + payment QRIS belum ada). Booking dibangun lebih dulu sebagai UI + mekanisme dengan provider pembayaran berupa interface + stub, supaya wiring nanti aditif.
 **Tujuan:** klien bisa memesan jadwal sendiri, operator tidak lagi mencatat manual di WhatsApp.
 
-**Kenapa setelah Fase 10:** booking butuh **deposit QRIS** dan **email/reminder**. Payment (Fase 10) yang menyediakan itu — bikin booking lebih dulu = kerja dua kali.
+**Kenapa setelah Fase 10:** booking butuh **deposit QRIS** dan **email/reminder**. Payment (Fase 10) yang menyediakan itu — bikin booking lebih dulu = kerja dua kali. Karena itu bagian itu **tidak** dikerjakan sekarang; yang dibangun adalah jalur yang tidak bergantung padanya.
 
 **Deliverable**
 
 | Area | File |
 |---|---|
-| API | `apps/api/src/routes/booking/{availability,requests,approve,status}.ts` |
-| Publik | `apps/api/static/booking/` — halaman booking + halaman status (link unik) |
-| Studio | `apps/studio/src/lib/booking/*` + layar dashboard + kalender operator |
-| Shared | `packages/shared/src/schemas.ts` — Zod `ServicePackage`, `AvailabilitySlot`, `BookingRequest`, `Booking` |
+| API — logika | `apps/api/src/routes/booking.ts` (rute publik + operator) · `apps/api/src/deposit.ts` (provider + stub) · `apps/api/src/rateLimit.ts` |
+| API — halaman publik | `apps/api/src/routes/booking-pages.ts` (`/booking`, `/booking/s/<token>`) · `apps/api/src/pages.ts` (shell HTML bersama) |
+| Studio | `apps/studio/src/components/BookingPanel.tsx` · `apps/studio/src/lib/booking/{bookingClient,useBookings}.ts` |
+| Shared | `packages/shared/src/booking.ts` (logika murni: slot, overlap, buffer, transisi, ICS) · `schemas.ts` (Zod booking) · `constants.ts` (`BOOKING_BASE_PATH`, `BOOKING_STATUS_PATH`, `BOOKING_TOKEN_RE`) |
+| E2E | `e2e/phase11-booking.e2e.mjs` (28 langkah, API + browser sungguhan) |
+| Tes | `packages/shared/src/booking.test.ts` · `apps/api/src/routes/booking.test.ts` · `apps/studio/src/lib/booking/{bookingClient,useBookings}.test.ts` |
 
 **Model data (di `packages/shared`)**
 
@@ -609,27 +611,27 @@ operator saat siap (tidak ikut git).
 
 **Task**
 
-- [ ] Halaman booking publik (tanpa login): pilih paket → tanggal → slot → isi data → kirim
-- [ ] Paket layanan + harga + deposit (CRUD di studio)
-- [ ] Kalender ketersediaan: hasil dari **jam operasional − booking ter-approve − tanggal diblokir**
-- [ ] Jam operasional + buffer antar-booking (configurable, mis. 30 menit bersih-bersih)
-- [ ] Blokir tanggal / tanggal tutup (libur, maintenance)
-- [ ] `POST /v1/booking/requests` → buat permintaan (status `requested`)
-- [ ] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
-- [ ] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
-- [ ] Konfirmasi via email + link WhatsApp siap kirim
-- [ ] Deposit QRIS → `depositStatus` berubah dari webhook (jalur Fase 10)
-- [ ] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
-- [ ] Reschedule oleh klien (batas: mis. minimal H-2)
-- [ ] Cancel oleh klien + kebijakan batas waktu (kebijakan refund deposit ditulis eksplisit di UI)
-- [ ] Reminder H-1 otomatis (job harian) via email + WhatsApp
-- [ ] Dashboard booking + kalender operator (harian/mingguan)
-- [ ] Invoice + kwitansi + lacak pelunasan
-- [ ] **Booking → event**: approve bikin record event + template default, jadi tidak perlu input ulang di hari-H
-- [ ] Laporan okupansi + pendapatan per periode
-- [ ] Export kalender `.ics`
-- [ ] Rate-limit form publik + honeypot (anti spam, karena tanpa login)
-- [ ] Halaman publik responsive + aksesibel (klien buka dari HP)
+- [x] Halaman booking publik (tanpa login): pilih paket → tanggal → slot → isi data → kirim
+- [x] Paket layanan + harga + deposit (CRUD di studio)
+- [x] Kalender ketersediaan: hasil dari **jam operasional − booking ter-approve − tanggal diblokir**
+- [x] Jam operasional + buffer antar-booking (configurable, mis. 30 menit bersih-bersih)
+- [x] Blokir tanggal / tanggal tutup (libur, maintenance)
+- [x] `POST /v1/booking/requests` → buat permintaan (status `requested`)
+- [x] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
+- [x] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
+- [ ] Konfirmasi via email + link WhatsApp siap kirim → **ditunda: butuh Fase 9** (belum ada SMTP/WA di infra)
+- [ ] Deposit QRIS → `depositStatus` berubah dari webhook → **ditunda: butuh Fase 10**. Provider pembayaran sudah berupa interface (`deposit.ts`); provider `qris` **melempar** dan ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk.
+- [x] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
+- [x] Reschedule oleh klien (batas: minimal `minNoticeHours` jam sebelumnya)
+- [x] Cancel oleh klien + kebijakan batas waktu
+- [ ] Reminder H-1 otomatis (job harian) via email + WhatsApp → **ditunda: butuh Fase 9**
+- [x] Dashboard booking + kalender operator (harian/mingguan)
+- [ ] Invoice + kwitansi + lacak pelunasan → **ditunda: butuh Fase 10** (angka pendapatan sudah ada di laporan okupansi)
+- [x] **Booking → event**: approve bikin record event (nama + tanggal dari slot), jadi tidak perlu input ulang di hari-H — idempoten, reschedule menggeser tanggalnya, tidak pernah bikin event kedua
+- [x] Laporan okupansi + pendapatan per periode
+- [x] Export kalender `.ics`
+- [x] Rate-limit form publik + honeypot (anti spam, karena tanpa login)
+- [x] Halaman publik responsive + aksesibel (klien buka dari HP)
 
 **Kriteria terima (FEATURE-MATRIX):** §B semua baris dengan **Fase = 11** (modul Booking)
 
@@ -639,23 +641,31 @@ operator saat siap (tidak ikut git).
 pnpm lint && pnpm -r typecheck && pnpm -r build
 pnpm --filter @foto-booth/api test
 pnpm --filter @foto-booth/studio test
+node e2e/phase11-booking.e2e.mjs
 ```
 
-- [ ] Alur end-to-end pakai script (bukan klik manual): request → approve → deposit → confirmed
-- [ ] **Double-booking ditolak**: dua request ke slot sama, yang kedua harus gagal dengan 409
-- [ ] Slot di luar jam operasional **dan** slot yang bertabrakan buffer ditolak
-- [ ] Tanggal diblokir → tidak muncul sebagai slot tersedia
-- [ ] Webhook deposit palsu (tanda tangan salah) → ditolak, `depositStatus` tidak berubah
-- [ ] Link status tanpa token / token salah → 404 (bukan bocor data booking orang lain)
-- [ ] Reminder H-1: uji dengan **tanggal dimajukan** (bukan tunggu sehari) → email/WA terkirim tepat sekali
-- [ ] Reschedule di bawah batas waktu → ditolak dengan pesan jelas
-- [ ] Approve → **record event benar-benar ada** dan bisa dipakai di studio (cek DB, bukan asumsi)
-- [ ] Form publik: submit 20× cepat → kena rate-limit
-- [ ] Ukur DOM: halaman booking di 390px — tidak ada elemen meluber (`scrollWidth <= clientWidth`)
-- [ ] CI hijau + container healthy
+- [x] Alur end-to-end pakai script (bukan klik manual): request → approve → **event** → reschedule → cancel → slot bebas — `e2e/phase11-booking.e2e.mjs`, **28 langkah lulus**
+- [x] **Double-booking ditolak**: dua request ke slot sama, yang kedua gagal `409` (`booking.test.ts` + e2e langkah 08 & 18)
+- [x] Slot di luar jam operasional **dan** slot yang bertabrakan buffer ditolak (`booking.test.ts` — "jam di luar operasional ditolak", "buffer membersihkan jarak antar sesi", "menyetujui booking yang slotnya sudah diambil ditolak")
+- [x] Tanggal diblokir → tidak muncul sebagai slot tersedia (`booking.test.ts` — "ketersediaan menandai slot terisi dan tanggal tutup")
+- [ ] Webhook deposit palsu (tanda tangan salah) → ditolak → **ditunda: butuh Fase 10**. Yang bisa dibuktikan sekarang: provider `qris` ditolak `400` dan deposit tidak pernah `paid` tanpa operator menandainya.
+- [x] Link status tanpa token / token salah → `404` (bukan bocor data booking orang lain)
+- [ ] Reminder H-1: uji dengan **tanggal dimajukan** → email/WA terkirim tepat sekali → **ditunda: butuh Fase 9**
+- [x] Reschedule di bawah batas waktu → ditolak dengan pesan jelas (`too_soon`; tamu dan operator sama-sama kena)
+- [x] Approve → **record event benar-benar ada** dan bisa dipakai di studio (dibaca dari DB, bukan asumsi; reschedule menggeser tanggal event, tidak menggandakan)
+- [x] Form publik: submit beruntun → kena rate-limit (`429` + `retry-after`; e2e langkah 10 memakai 6 percobaan dari satu IP)
+- [x] Ukur DOM: halaman booking di 390px — tidak ada elemen meluber (`scrollWidth <= clientWidth`, e2e langkah 17)
+- [ ] CI hijau + container healthy → dijalankan di gate deploy (b11)
 
-**Gate keluar:** semua task `[x]` · alur booking→event terbukti end-to-end · anti double-booking & token link terbukti lewat tes · bukti ditulis.
-**Bukti:** —
+**Gate keluar:** ⛔ **belum terpenuhi** — task email/reminder (Fase 9), deposit QRIS + invoice (Fase 10), dan webhook deposit belum ada. Alur booking→event, anti double-booking, dan token link **sudah** terbukti lewat tes; yang kurang adalah bagian yang bergantung pada fase berikutnya.
+
+**Bukti** (2026-10-13)
+
+- `pnpm lint` → 0 · `pnpm -r typecheck` → 0 (shared · api · studio)
+- Tes: shared **70** · api **73** · studio **663** — semua hijau, 0 gagal
+- `node e2e/phase11-booking.e2e.mjs` → **28 langkah lulus** (API proses terpisah + Chromium sungguhan)
+- Dua bug nyata ditemukan & diperbaiki oleh e2e ini: (1) form publik tidak mengirim jam yang dipilih; (2) `FORM_SCRIPT` disisipkan ke `<head>` sehingga daftar paket tidak pernah termuat.
+- Stub pembayaran: provider `qris` **melempar** dan ditolak `400` di rute setelan — tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk.
 
 ---
 

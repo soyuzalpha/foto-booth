@@ -118,6 +118,7 @@
     "capture": "Capture",
     "template": "Template editor",
     "gallery": "Gallery & upload",
+    "booking": "Booking & reservations",
     "kiosk": "Kiosk mode"
   },
   "template": {
@@ -301,5 +302,88 @@
   },
   "locale": {
     "label": "Language"
+  },
+  "booking": {
+    "title": "Booking & reservations",
+    "signedOut": "Sign in as operator in the Gallery & upload tab first. The session is shared, so one sign-in covers every tab.",
+    "loading": "Loading…",
+    "refresh": "Refresh",
+    "saving": "Saving…",
+    "footerNote": "Payments still run without a gateway. The operator records the deposit manually; QRIS/Midtrans/Xendit wiring lands in a separate phase.",
+    "report": {
+      "title": "Occupancy summary",
+      "empty": "No data for this period yet.",
+      "requested": "Awaiting review",
+      "booked": "Locked bookings",
+      "hours": "Hours used",
+      "revenue": "Locked value"
+    },
+    "pending": {
+      "title": "Needs review",
+      "note": "Requests not yet decided. Approve to lock the slot, or reject with a reason."
+    },
+    "list": {
+      "title": "Booking list",
+      "empty": "No bookings yet."
+    },
+    "field": {
+      "when": "Time",
+      "package": "Package",
+      "contact": "Contact",
+      "deposit": "Deposit",
+      "reason": "Note"
+    },
+    "status": {
+      "requested": "Requested",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled",
+      "completed": "Completed"
+    },
+    "deposit": {
+      "unpaid": "Unpaid",
+      "paid": "Paid",
+      "waived": "Waived"
+    },
+    "action": {
+      "approve": "Approve",
+      "complete": "Mark complete",
+      "reject": "Reject",
+      "rejectPrompt": "Rejection reason (may be empty):",
+      "cancel": "Cancel",
+      "cancelConfirm": "Cancel this booking? The slot is released.",
+      "reschedule": "Move time",
+      "newTime": "New time",
+      "saveTime": "Save time",
+      "markPaid": "Mark deposit paid"
+    },
+    "packages": {
+      "title": "Packages & pricing",
+      "empty": "No packages yet. Create one below.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "detail": "{{minutes}} min · {{price}} · deposit {{deposit}}",
+      "createTitle": "Add package",
+      "name": "Package name",
+      "duration": "Duration (minutes)",
+      "price": "Price (IDR)",
+      "deposit": "Deposit (IDR)",
+      "create": "Add package",
+      "creating": "Adding…",
+      "depositTooBig": "Deposit cannot exceed the package price."
+    },
+    "settings": {
+      "title": "Booking settings",
+      "note": "Buffer between sessions, minimum notice, and how far ahead guests may book.",
+      "buffer": "Buffer between sessions (min)",
+      "notice": "Minimum notice (hours)",
+      "advance": "Max days ahead",
+      "provider": "Payment provider",
+      "providerNone": "No gateway (manual deposit)",
+      "providerManual": "Manual transfer recorded by operator",
+      "providerNote": "Only manual mode is available. Gateway options appear in the payments phase.",
+      "requireDeposit": "Require a deposit before locking the slot",
+      "save": "Save settings"
+    }
   }
 }

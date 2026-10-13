@@ -59,6 +59,17 @@ export function newGalleryHash(random: RandomSource = nodeRandom): string {
   return toBase64Url(random.bytes(12));
 }
 
+/**
+ * Token acak tanpa prefix, untuk URL yang dipegang tamu (mis. status booking).
+ *
+ * Dipisah dari `newGalleryHash` walau bentuknya sama: panjangnya beda (16 byte
+ * vs 12) dan alasannya beda — token booking melindungi data pemesan, sedangkan
+ * hash galeri cuma mengidentifikasi album.
+ */
+export function newToken(bytes: number, random: RandomSource = nodeRandom): string {
+  return toBase64Url(random.bytes(bytes));
+}
+
 export interface SecretHash {
   salt: string;
   hash: string;
