@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "**/dist-probe/**",
       "**/dev-dist/**",
       "**/node_modules/**",
       "**/storage/**",
@@ -49,6 +50,17 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+    },
+  },
+
+  // Probe produksi faceEnhance: entri browser yang dibangun lewat pipeline Vite
+  // sungguhan (`vite.probe.config.ts`) untuk membuktikan jalur ORT + wasm +
+  // cache model benar-benar jalan di bundel produksi. Dijalankan manual
+  // (`vite build --config vite.probe.config.ts`), bukan bagian app.
+  {
+    files: ["apps/studio/probe/**/*.ts"],
+    languageOptions: {
+      globals: { ...globals.browser },
     },
   },
 

@@ -19,6 +19,7 @@ import type { AspectRatioId } from "./aspectRatio.ts";
 import {
   allCaptured,
   initialSnapshot,
+  isWaiting,
   reduceSession,
   type SessionConfig,
   type SessionEvent,
@@ -79,7 +80,7 @@ export interface CaptureSessionOptions {
   tickMs?: number;
   signalIntervalMs?: number;
   thresholds?: SignalThresholds;
-  config?: SessionConfig;
+  config?: Partial<SessionConfig>;
   /** Crop hasil ke rasio. Bisa diganti di tes supaya tidak butuh DOM. */
   crop?: (blob: Blob, id: AspectRatioId) => Promise<CroppedBlob>;
   /** Penyimpanan id sesi (localStorage). `null` = jangan persist. */
@@ -552,7 +553,10 @@ export class CaptureSession {
       return;
     }
 
-    if (this.snapshotValue.state === "countdown") {
+    // Countdown dan jeda offset shutter sama-sama state bertimer: tanpa tick,
+    // sesi akan diam di situ selamanya. Daftarnya diambil dari `isWaiting`
+    // supaya tidak ada dua tempat yang tahu "state mana yang menunggu".
+    if (isWaiting(this.snapshotValue.state)) {
       this.scheduleTick();
       return;
     }

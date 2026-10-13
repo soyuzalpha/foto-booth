@@ -397,19 +397,43 @@ test("config mengubah shotCount dan mempertahankan isi slot lama", () => {
 });
 
 test("normalizeConfig menjepit nilai ekstrem dan membulatkan", () => {
-  assert.deepEqual(normalizeConfig({ shotCount: 999, countdownMs: -5, intervalMs: 12.6, reviewMs: 0 }), {
-    shotCount: 12,
-    countdownMs: 0,
-    intervalMs: 13,
-    reviewMs: 0,
-  });
+  assert.deepEqual(
+    normalizeConfig({
+      ...DEFAULT_SESSION_CONFIG,
+      shotCount: 999,
+      countdownMs: -5,
+      intervalMs: 12.6,
+      reviewMs: 0,
+      shutterOffsetMs: 333,
+    }),
+    {
+      shotCount: 12,
+      countdownMs: 0,
+      intervalMs: 13,
+      reviewMs: 0,
+      shutterOffsetMs: 350,
+      autoConnect: true,
+    },
+  );
 
-  assert.deepEqual(normalizeConfig({ shotCount: 0, countdownMs: 999_999, intervalMs: Number.NaN, reviewMs: -1 }), {
-    shotCount: 1,
-    countdownMs: 60_000,
-    intervalMs: 0,
-    reviewMs: 0,
-  });
+  assert.deepEqual(
+    normalizeConfig({
+      ...DEFAULT_SESSION_CONFIG,
+      shotCount: 0,
+      countdownMs: 999_999,
+      intervalMs: Number.NaN,
+      reviewMs: -1,
+      shutterOffsetMs: 99_999,
+    }),
+    {
+      shotCount: 1,
+      countdownMs: 60_000,
+      intervalMs: 0,
+      reviewMs: 0,
+      shutterOffsetMs: 2_000,
+      autoConnect: true,
+    },
+  );
 });
 
 test("event yang tidak masuk akal diabaikan, tidak melempar", () => {
@@ -455,8 +479,9 @@ test("setSlot tidak memutasi array lama", () => {
   assert.deepEqual(after, ["a", "x", "c"]);
 });
 
-test("isWaiting hanya benar saat countdown", () => {
+test("isWaiting benar saat countdown maupun jeda shutter", () => {
   assert.equal(isWaiting("countdown"), true);
+  assert.equal(isWaiting("shutter"), true, "jeda offset shutter juga bertimer");
   assert.equal(isWaiting("armed"), false);
   assert.equal(isWaiting("capturing"), false);
   assert.equal(isWaiting("stalled"), false);
@@ -505,4 +530,96 @@ test("normalizeConfig menjepit reviewMs dan menyediakan nilai default", () => {
   assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, reviewMs: -500 }).reviewMs, 0);
   assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, reviewMs: 999_999 }).reviewMs, 60_000);
   assert.equal(DEFAULT_SESSION_CONFIG.reviewMs, 0);
+});
+
+// ── offset shutter (Fase 6) ─────────────────────────────────────────────
+
+test("initialSnapshot menerima konfigurasi sebagian dan mengisi sisanya dari default", () => {
+  const snapshot = initialSnapshot({ shotCount: 2 });
+
+  assert.equal(snapshot.config.shotCount, 2);
+  assert.equal(snapshot.config.countdownMs, DEFAULT_SESSION_CONFIG.countdownMs);
+  assert.equal(snapshot.config.shutterOffsetMs, DEFAULT_SESSION_CONFIG.shutterOffsetMs);
+  assert.equal(DEFAULT_SESSION_CONFIG.shutterOffsetMs, 0, "default: tanpa jeda tambahan");
+});
+
+test("offset shutter 0 → hitungan habis langsung capturing (perilaku lama)", () => {
+  const snapshot = run(
+    initialSnapshot({ shotCount: 1, countdownMs: 1000, intervalMs: 0, reviewMs: 0, shutterOffsetMs: 0 }),
+    { type: "arm", deviceId: "dev-1" },
+    { type: "signal", signal: "ok" },
+    { type: "begin" },
+    { type: "tick", elapsedMs: 1000 },
+  );
+
+  assert.equal(snapshot.state, "capturing");
+});
+
+test("offset shutter > 0 → angka nol dulu, frame diambil setelah jeda habis", () => {
+  const counting = run(
+    initialSnapshot({ shotCount: 1, countdownMs: 1000, intervalMs: 0, reviewMs: 0, shutterOffsetMs: 300 }),
+    { type: "arm", deviceId: "dev-1" },
+    { type: "signal", signal: "ok" },
+    { type: "begin" },
+  );
+  assert.equal(counting.state, "countdown");
+
+  const zero = reduceSession(counting, { type: "tick", elapsedMs: 1000 });
+  assert.equal(zero.state, "shutter", "angka sudah nol tapi frame belum diambil");
+  assert.equal(zero.waitRemainingMs, 300);
+  assert.equal(zero.waitKind, "shutter");
+
+  const half = reduceSession(zero, { type: "tick", elapsedMs: 150 });
+  assert.equal(half.state, "shutter");
+  assert.equal(half.waitRemainingMs, 150, "jeda dihitung terpisah dari hitungan");
+
+  const done = reduceSession(half, { type: "tick", elapsedMs: 150 });
+  assert.equal(done.state, "capturing");
+  assert.equal(done.waitRemainingMs, 0);
+});
+
+test("offset shutter tetap berlaku saat countdown dimatikan", () => {
+  const snapshot = run(
+    initialSnapshot({ shotCount: 1, countdownMs: 0, intervalMs: 0, reviewMs: 0, shutterOffsetMs: 300 }),
+    { type: "arm", deviceId: "dev-1" },
+    { type: "signal", signal: "ok" },
+    { type: "begin" },
+  );
+
+  assert.equal(snapshot.state, "shutter", "tanpa hitungan pun ada jeda kecil sebelum jepret");
+  assert.equal(snapshot.waitRemainingMs, 300);
+});
+
+test("sinyal hilang saat jeda shutter → tahan di 0, jangan jepret frame hitam", () => {
+  const held = run(
+    initialSnapshot({ shotCount: 1, countdownMs: 0, intervalMs: 0, reviewMs: 0, shutterOffsetMs: 300 }),
+    { type: "arm", deviceId: "dev-1" },
+    { type: "signal", signal: "no-signal" },
+    { type: "begin" },
+    { type: "tick", elapsedMs: 300 },
+  );
+
+  assert.equal(held.state, "shutter", "tetap menunggu, tidak menembak");
+  assert.equal(held.waitRemainingMs, 0);
+  assert.equal(reduceSession(held, { type: "tick", elapsedMs: 100 }), held);
+
+  const recovered = reduceSession(held, { type: "signal", signal: "ok" });
+  assert.equal(recovered.state, "capturing", "sinyal balik → lanjut jepret sendiri");
+});
+
+test("normalizeConfig menjepit offset shutter ke batas & langkah slider", () => {
+  assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, shutterOffsetMs: -100 }).shutterOffsetMs, 0);
+  assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, shutterOffsetMs: 5_000 }).shutterOffsetMs, 2_000);
+  assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, shutterOffsetMs: 333 }).shutterOffsetMs, 350);
+});
+
+test("auto-connect hidup secara default, hanya mati kalau dimatikan eksplisit", () => {
+  assert.equal(DEFAULT_SESSION_CONFIG.autoConnect, true);
+  assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG }).autoConnect, true);
+  assert.equal(normalizeConfig({ ...DEFAULT_SESSION_CONFIG, autoConnect: false }).autoConnect, false);
+  // Nilai aneh (dari JSON lama / localStorage yang korup) → kembali ke hidup.
+  assert.equal(
+    normalizeConfig({ ...DEFAULT_SESSION_CONFIG, autoConnect: undefined as unknown as boolean }).autoConnect,
+    true,
+  );
 });

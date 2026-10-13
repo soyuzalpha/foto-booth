@@ -117,10 +117,20 @@ export async function openOpfsRoot(): Promise<OpfsDirectory | null> {
   }
 }
 
-export function createLocalArchive(folder: string): LocalArchive {
-  return new LocalArchive(async () => {
-    const root = await openOpfsRoot();
-    if (root === null) throw new Error("OPFS tidak tersedia");
-    return root;
-  }, folder);
+/** Direktori akar arsip — OPFS maupun folder pilihan (File System Access). */
+export type ArchiveDirectory = OpfsDirectory;
+
+/** Cara mendapatkan direktori akar arsip; bisa disuntik (folder pilihan/OPFS). */
+export type ArchiveRootProvider = () => Promise<ArchiveDirectory>;
+
+export function createLocalArchive(folder: string, root?: ArchiveRootProvider): LocalArchive {
+  return new LocalArchive(
+    root ??
+      (async () => {
+        const opfs = await openOpfsRoot();
+        if (opfs === null) throw new Error("OPFS tidak tersedia");
+        return opfs;
+      }),
+    folder,
+  );
 }

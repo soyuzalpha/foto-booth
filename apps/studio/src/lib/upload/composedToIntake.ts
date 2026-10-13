@@ -32,6 +32,24 @@ export function captureFilename(shotIndex: number, extension = "jpg"): string {
 export interface ToIntakeOptions {
   /** Sumber thumbnail. `null` = tidak ada thumbnail; itu bukan kegagalan. */
   makeThumb?: (blob: Blob) => Promise<Blob | null>;
+  /**
+   * Transformasi opsional atas byte foto (filter Fase 6: rotasi, chroma key,
+   * koreksi warna, penghalus wajah).
+   *
+   * `null` = pakai blob asli. Adapter filter **tidak pernah melempar** — kalau
+   * ia melempar pun (bug di lapisan lain), kita jatuh ke blob asli, karena foto
+   * yang belum difilter jauh lebih baik daripada foto yang hilang dari antrian.
+   * Ukuran bisa berubah (rotasi menukar lebar/tinggi), jadi hasilnya membawa
+   * dimensi baru — bukan disalin dari frame lama.
+   */
+  process?: (blob: Blob) => Promise<ProcessedFrame | null>;
+}
+
+/** Hasil satu tahap pemrosesan byte foto. */
+export interface ProcessedFrame {
+  blob: Blob;
+  width: number;
+  height: number;
 }
 
 /**
@@ -49,23 +67,43 @@ export async function framesToIntake(
 
   const photos: IntakePhoto[] = [];
   for (const frame of ordered) {
+    // Filter dulu, thumbnail kemudian: thumbnail harus mencerminkan foto yang
+    // benar-benar diunggah, bukan versi mentahnya.
+    let blob = frame.blob;
+    let width = frame.width;
+    let height = frame.height;
+
+    if (options.process !== undefined) {
+      try {
+        const out = await options.process(frame.blob);
+        if (out !== null && out.blob.size > 0) {
+          blob = out.blob;
+          width = out.width;
+          height = out.height;
+        }
+      } catch {
+        // Adapter filter seharusnya tidak melempar; kalau toh melempar, foto
+        // asli tetap disimpan.
+      }
+    }
+
     let thumb: Blob | null = null;
     if (options.makeThumb !== undefined) {
       // Thumbnail best-effort: pembuatnya boleh melempar (canvas tidak ada,
       // gambar rusak), dan foto besarnya tetap harus ikut.
       try {
-        thumb = await options.makeThumb(frame.blob);
+        thumb = await options.makeThumb(blob);
       } catch {
         thumb = null;
       }
     }
 
     photos.push({
-      blob: frame.blob,
+      blob,
       thumb,
       contentType: CAPTURE_CONTENT_TYPE,
-      width: frame.width,
-      height: frame.height,
+      width,
+      height,
       filename: captureFilename(frame.shotIndex),
       index: frame.shotIndex,
     });

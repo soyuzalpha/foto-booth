@@ -12,6 +12,7 @@ import { contentRoutes } from "./routes/content.ts";
 import { galleryRoutes } from "./routes/gallery.ts";
 import { galleryOperatorRoutes } from "./routes/galleries.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { modelRoutes } from "./routes/models.ts";
 import { scheduleTtlCleanup } from "./jobs/ttl.ts";
 
 /**
@@ -40,6 +41,9 @@ export async function buildApp(
   await galleryOperatorRoutes(app, ctx);
   await galleryRoutes(app, ctx);
   await contentRoutes(app);
+
+  // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.
+  await modelRoutes(app);
 
   // Job TTL: galeri lewat 30 hari dihapus (objek dulu, baru baris). Dimatikan
   // di tes supaya tidak ada timer latar yang mengubah hasil.

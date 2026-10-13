@@ -25,6 +25,14 @@ import {
   saveSession,
   type OperatorSession,
 } from "../session/operatorSession.ts";
+import {
+  asArchiveRoot,
+  browserArchiveDeps,
+  chooseArchiveBackend,
+  pickArchiveTarget,
+  type ArchiveDeps,
+  type ArchiveTarget,
+} from "../storage/directoryPicker.ts";
 import { createLocalArchive, type LocalArchive } from "../upload/localArchive.ts";
 import { intakePhoto, summarizeIntake, type IntakePhoto, type IntakeSummary } from "../upload/photoIntake.ts";
 import { createUploadStore, type UploadStore } from "../upload/uploadStore.ts";
@@ -37,7 +45,7 @@ import {
   type ActiveGallery,
 } from "./activeGallery.ts";
 import type { GalleryClient, GallerySummary } from "./galleryClient.ts";
-import { GalleryContext, type GalleryContextValue } from "./galleryContext.ts";
+import { GalleryContext, type ArchiveState, type GalleryContextValue } from "./galleryContext.ts";
 import { useGalleries } from "./useGalleries.ts";
 
 export interface GalleryProviderProps {
@@ -46,11 +54,27 @@ export interface GalleryProviderProps {
   client?: GalleryClient;
   store?: UploadStore;
   archive?: LocalArchive | null;
+  /** Injectable untuk tes; default dari global browser. */
+  archiveDeps?: ArchiveDeps;
 }
 
-export function GalleryProvider({ children, client, store, archive }: GalleryProviderProps): React.JSX.Element {
+export function GalleryProvider({
+  children,
+  client,
+  store,
+  archive,
+  archiveDeps,
+}: GalleryProviderProps): React.JSX.Element {
   const [session, setSession] = useState<OperatorSession | null>(() => loadSession());
   const [active, setActiveState] = useState<ActiveGallery | null>(() => loadActiveGallery());
+
+  // Folder arsip pilihan operator. Disimpan per sesi aplikasi saja: handle
+  // File System Access tidak bisa ditaruh di localStorage, dan menyimpannya di
+  // IndexedDB berarti menambah satu jalur pemulihan izin yang belum dibutuhkan.
+  const [archiveTarget, setArchiveTarget] = useState<ArchiveTarget | null>(null);
+
+  const deps = useMemo<ArchiveDeps>(() => archiveDeps ?? browserArchiveDeps(), [archiveDeps]);
+  const archiveAvailable = useMemo(() => chooseArchiveBackend(deps), [deps]);
 
   const galleries = useGalleries(
     client === undefined ? { token: session?.token ?? null } : { token: session?.token ?? null, client },
@@ -62,11 +86,16 @@ export function GalleryProvider({ children, client, store, archive }: GalleryPro
 
   // Arsip mengikuti album aktif — foldernya adalah hash album, sama seperti di
   // ZIP galeri, jadi penamaan berkasnya konsisten di kedua sisi.
+  //
+  // Kalau operator memilih folder sendiri, akarnya folder itu; kalau tidak,
+  // akarnya OPFS. Keduanya lewat `LocalArchive` yang sama sehingga jalur
+  // kegagalannya pun sama: gagal simpan → `null`, upload tetap jalan.
   const localArchive = useMemo<LocalArchive | null>(() => {
     if (archive !== undefined) return archive;
     if (active === null) return null;
+    if (archiveTarget !== null) return createLocalArchive(active.hash, asArchiveRoot(archiveTarget.handle));
     return createLocalArchive(active.hash);
-  }, [active, archive]);
+  }, [active, archive, archiveTarget]);
 
   const queue = useUploadQueue({
     galleryId: active?.id ?? null,
@@ -97,6 +126,30 @@ export function GalleryProvider({ children, client, store, archive }: GalleryPro
     clearActiveGallery();
     setActiveState(null);
   }, []);
+
+  // Pilih folder arsip. `pickArchiveTarget` tidak pernah melempar dan sudah
+  // menjatuhkan diri ke OPFS kalau API-nya tidak ada atau izinnya ditolak —
+  // jadi di sini tidak ada penanganan error yang bisa menutupi kegagalan.
+  const chooseFolder = useCallback(async (): Promise<ArchiveTarget | null> => {
+    const picked = await pickArchiveTarget(deps);
+    if (picked !== null) setArchiveTarget(picked);
+    return picked;
+  }, [deps]);
+
+  const clearFolder = useCallback((): void => {
+    setArchiveTarget(null);
+  }, []);
+
+  const archiveState = useMemo<ArchiveState>(
+    () => ({
+      available: archiveAvailable,
+      chosen: archiveTarget?.backend ?? null,
+      chosenLabel: archiveTarget?.label ?? null,
+      chooseFolder,
+      clearFolder,
+    }),
+    [archiveAvailable, archiveTarget, chooseFolder, clearFolder],
+  );
 
   const intake = useCallback(
     async (photos: IntakePhoto[]): Promise<IntakeSummary> => {
@@ -133,9 +186,10 @@ export function GalleryProvider({ children, client, store, archive }: GalleryPro
       setActive,
       clearActive,
       queue,
+      archive: archiveState,
       intake,
     }),
-    [active, clearActive, galleries, intake, queue, session, setActive, signIn, signOut],
+    [active, archiveState, clearActive, galleries, intake, queue, session, setActive, signIn, signOut],
   );
 
   return <GalleryContext.Provider value={value}>{children}</GalleryContext.Provider>;

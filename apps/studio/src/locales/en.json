@@ -49,6 +49,8 @@
     "intervalSecs": "Delay between shots",
     "reviewSecs": "Review length",
     "reviewManual": "Wait for operator",
+    "shutterOffset": "Delay before shutter",
+    "autoConnect": "Connect camera automatically",
     "secondsShort": "{{value}} s",
     "settingsLocked": "Settings are locked while a session is running.",
     "settingsHint": "Applies when you press \"Prepare session\".",
@@ -75,6 +77,7 @@
     "stateIdle": "Idle",
     "stateArmed": "Armed",
     "stateCountdown": "Countdown",
+    "stateShutter": "Steady…",
     "stateCapturing": "Capturing",
     "stateReview": "Review",
     "stateProcessing": "Processing",
@@ -89,7 +92,23 @@
     "errorUnknown": "Something went wrong while accessing the camera.",
     "saved": "{{count}} photos queued for upload.",
     "saveFailed": "Could not queue: {{message}}",
-    "noGallery": "No active gallery yet — photos have no destination. Pick one on the “Gallery & upload” tab."
+    "noGallery": "No active gallery yet — photos have no destination. Pick one on the “Gallery & upload” tab.",
+    "filters": "Photo filters",
+    "rotation": "Rotation",
+    "rotationDeg": "{{value}}°",
+    "quality": "Quality",
+    "chromaKey": "Green screen (remove key colour)",
+    "background": "Background",
+    "bgNone": "Leave as-is",
+    "bgColor": "Solid colour",
+    "bgBlur": "Blur background",
+    "bgAi": "Replace background (AI)",
+    "brightness": "Brightness",
+    "contrast": "Contrast",
+    "saturation": "Saturation",
+    "faceEnhance": "Smooth faces",
+    "filterReset": "Reset filters",
+    "filterHint": "Applies to the next photos. The raw shot is kept safe if a filter fails."
   },
   "install": {
     "button": "Install as an app",
@@ -261,6 +280,24 @@
   "footer": {
     "note": "Buy once, not a subscription.",
     "landing": "Home"
+  },
+  "debug": {
+    "title": "Debug mode",
+    "refresh": "Refresh report",
+    "hint": "Turn off with ?debug=0 in the page address."
+  },
+  "archive": {
+    "title": "Photo archive folder",
+    "note": "A local copy of every photo is written here, split per album. Gallery upload never depends on this archive — if archiving fails, the photo is still sent.",
+    "choose": "Choose folder…",
+    "choosing": "Choosing…",
+    "clear": "Back to app archive",
+    "unavailable": "This browser has no local archive. Photos are still uploaded to the gallery.",
+    "backend": {
+      "fs-access": "Chosen folder",
+      "opfs": "App archive (OPFS)",
+      "none": "No local archive"
+    }
   },
   "locale": {
     "label": "Language"

@@ -49,6 +49,8 @@
     "intervalSecs": "Jeda antar jepretan",
     "reviewSecs": "Durasi review",
     "reviewManual": "Tunggu operator",
+    "shutterOffset": "Jeda sebelum jepret",
+    "autoConnect": "Sambungkan kamera otomatis",
     "secondsShort": "{{value}} dtk",
     "settingsLocked": "Pengaturan dikunci selama sesi berjalan.",
     "settingsHint": "Berlaku saat menekan \"Siapkan sesi\".",
@@ -75,6 +77,7 @@
     "stateIdle": "Idle",
     "stateArmed": "Siap",
     "stateCountdown": "Hitung mundur",
+    "stateShutter": "Bersiap jepret",
     "stateCapturing": "Menjepret",
     "stateReview": "Review",
     "stateProcessing": "Memproses",
@@ -89,7 +92,23 @@
     "errorUnknown": "Terjadi kesalahan saat mengakses kamera.",
     "saved": "{{count}} foto masuk antrian upload.",
     "saveFailed": "Gagal menyimpan ke antrian: {{message}}",
-    "noGallery": "Belum ada galeri aktif — foto tidak punya tujuan. Pilih galeri di tab “Galeri & upload”."
+    "noGallery": "Belum ada galeri aktif — foto tidak punya tujuan. Pilih galeri di tab “Galeri & upload”.",
+    "filters": "Filter foto",
+    "rotation": "Rotasi",
+    "rotationDeg": "{{value}}°",
+    "quality": "Kualitas",
+    "chromaKey": "Green screen (buang warna kunci)",
+    "background": "Latar belakang",
+    "bgNone": "Biarkan asli",
+    "bgColor": "Warna solid",
+    "bgBlur": "Kaburkan latar",
+    "bgAi": "Ganti latar (AI)",
+    "brightness": "Kecerahan",
+    "contrast": "Kontras",
+    "saturation": "Saturasi",
+    "faceEnhance": "Perhalus wajah",
+    "filterReset": "Reset filter",
+    "filterHint": "Berlaku untuk foto berikutnya. Foto mentah tetap aman kalau filter gagal."
   },
   "install": {
     "button": "Install sebagai app",
@@ -261,6 +280,24 @@
   "footer": {
     "note": "Beli sekali, bukan langganan.",
     "landing": "Beranda"
+  },
+  "debug": {
+    "title": "Mode debug",
+    "refresh": "Perbarui laporan",
+    "hint": "Matikan dengan ?debug=0 di alamat halaman."
+  },
+  "archive": {
+    "title": "Folder arsip foto",
+    "note": "Salinan lokal tiap foto disimpan ke sini, terpisah per album. Upload ke galeri tidak pernah bergantung pada arsip ini — kalau arsip gagal, foto tetap terkirim.",
+    "choose": "Pilih folder…",
+    "choosing": "Memilih…",
+    "clear": "Kembali ke arsip aplikasi",
+    "unavailable": "Browser ini tidak menyediakan arsip lokal. Foto tetap terunggah ke galeri.",
+    "backend": {
+      "fs-access": "Folder pilihan",
+      "opfs": "Arsip aplikasi (OPFS)",
+      "none": "Tidak ada arsip lokal"
+    }
   },
   "locale": {
     "label": "Bahasa"

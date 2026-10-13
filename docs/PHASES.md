@@ -472,6 +472,111 @@ refresh (item `uploading` yatim tak pernah dijadwalkan) — commit `4aacfd2`.
 
 ---
 
+## Fase 6 — Green screen + adjustments + face enhance
+
+**Status:** `[x]` selesai & tervalidasi (2026-10-13)
+**Gate masuk:** MVP (Fase 0–5) `[x]` — capture, template, print, kiosk, galeri/upload semua jalan.
+**Tujuan:** hasil foto bisa **diolah di perangkat** sebelum masuk antrian upload — background diganti (chroma key / blur / AI), warna diperbaiki (brightness/contrast/saturation), wajah diperhalus, orientasi & kualitas diatur, kamera tersambung sendiri.
+
+**Kenapa sebelum Fase 7:** ini tahap pengolahan gambar yang sama yang akan dipakai ulang video (Fase 7). Pipeline-nya ditaruh di satu tempat dulu supaya tidak ada dua implementasi filter.
+
+**Prinsip (jangan dilanggar)**
+
+1. **Semua pengolahan di perangkat** (canvas / WebGL / Worker). Foto tetap **tidak pernah lewat API** — sama seperti Fase 5; API hanya menyajikan file model statis.
+2. Filter berjalan **setelah komposisi strip & sebelum `composedToIntake`** — byte yang di-upload sudah final, tidak ada render ulang di server.
+3. **Logika murni terpisah dari DOM**: keputusan (urutan tahap, matriks warna, alpha chroma key, ukuran setelah rotasi) ditulis sebagai fungsi murni yang bisa diuji **tanpa browser**; efek piksel dijalankan adapter canvas/WebGL.
+4. **Kegagalan filter tidak boleh menggagalkan foto.** Kalau WebGL/segmenter/face-enhance gagal atau model belum ter-cache, foto asli tetap masuk antrian (degradasi anggun), bukan hilang.
+5. **Model AI tidak ikut git.** MediaPipe selfie segmenter (250 KB) di-bundle di repo (`apps/studio/public/models/`); **GFPGAN ~340 MB** (melebihi batas 100 MB/file GitHub) disajikan API dari `$STORAGE_DIR/models/` → di-fetch sekali lalu di-cache di Cache Storage supaya kiosk tetap jalan **offline setelah sinkron pertama**.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Filter murni | `apps/studio/src/lib/filters/{types,adjustments,chromaKey,blur,rotation,pipeline,presets}.ts` |
+| Adapter DOM | `apps/studio/src/lib/filters/{applyFilters,chromaKeyShader,segmenter,faceEnhance,modelCache}.ts` |
+| Capture ekstra | `apps/studio/src/lib/capture/{quality,shutterOffset,autoConnect}.ts` |
+| Storage | `apps/studio/src/lib/storage/directoryPicker.ts` |
+| Debug & telemetry | `apps/studio/src/lib/debug/debugMode.ts` · `apps/studio/src/lib/telemetry/sentry.ts` |
+| API statis | rute `/models/*` di `apps/api` (menyajikan `$STORAGE_DIR/models/`, read-only) |
+| UI | `CapturePanel.tsx` (seksi Filter) · `StatusPanel.tsx` (debug + cek storage) · `locales/{id,en}.json` |
+
+**Task**
+
+- [x] `pipeline.ts`: `resolveFilterPlan(settings)` → daftar tahap berurutan + flag (`needsSegmenter`, `needsFaceEnhance`, `needsChromaKey`) — murni, teruji
+- [x] `chromaKey.ts`: alpha dari (r,g,b) + key color/similarity/smoothness + **spill suppression** — murni, teruji
+- [x] `adjustments.ts`: brightness/contrast/saturation → matriks warna 4×5 + string `filter:` CSS — murni, teruji
+- [x] `blur.ts`: radius blur background (blur mode) — murni, teruji
+- [x] `rotation.ts`: 0/90/180/270 → dimensi tukar + transform kanvas — murni, teruji
+- [x] `chromaKeyShader.ts`: shader WebGL (keying + spill) sebagai sumber program; fallback 2D bila WebGL tak ada
+- [x] `applyFilters.ts`: `blob → plan → blob` lewat OffscreenCanvas/Worker; **gagal → kembalikan blob asli**
+- [x] `segmenter.ts`: provider MediaPipe selfie segmenter (model bundled) → mask per frame untuk `virtualBackground: ai`
+- [x] `faceEnhance.ts`: provider GFPGAN via `onnxruntime-web`, model dari `/models/*` + cache
+- [x] `modelCache.ts`: fetch model sekali → Cache Storage; tersedia offline setelah sync pertama
+- [x] `quality.ts`: preset (mis. hemat / standar / maks) → `{maxWidth, jpegQuality}` — murni, teruji
+- [x] `shutterOffset.ts`: offset tunda shutter (kompensasi kedip/gerak) — murni, teruji
+- [x] `autoConnect.ts`: pilih device kamera terakhir/terdaftar otomatis saat studio dibuka — murni, teruji
+- [x] `directoryPicker.ts`: File System Access API → simpan arsip lokal ke folder pilihan user; **fallback OPFS** bila API tak ada/ditolak
+- [x] `debugMode.ts`: aktif via `?debug=1`/localStorage + laporan storage (persisted, kuota, service worker, cache model)
+- [x] `sentry.ts`: init dari `VITE_SENTRY_DSN`; **tanpa DSN = no-op** (dev & prod tanpa DSN tetap jalan)
+- [x] Rute API `/models/*`: hanya file di `$STORAGE_DIR/models/`, read-only, tanpa path traversal
+- [x] Wiring UI: seksi Filter di `CapturePanel` (rotasi, quality, background mode, chroma key, adjustments, face enhance) + panel debug di `StatusPanel`
+- [x] i18n `id` + `en` untuk semua label baru
+- [x] Tes unit untuk **setiap** modul murni di atas
+
+**Kriteria terima (FEATURE-MATRIX):** §B semua baris dengan **Fase = 6** (11 baris: rotasi · quality preset · shutter offset · auto-connect · chromaKey · virtualBackground blur/ai · adjustments · faceEnhance · storage location picker · debug mode + cek storage · Sentry)
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm --filter @foto-booth/studio test
+pnpm --filter @foto-booth/shared test
+
+# uji piksel/dimensi + jalur produksi di browser sungguhan (harness di repo).
+# Membangun `apps/studio/dist-probe` sendiri lewat pipeline Vite produksi dan
+# menyajikannya dengan server statis kecil — tidak butuh API atau bucket.
+pnpm test:e2e:filters
+```
+
+- [x] **Chroma key benar-benar menimpa background**: uji piksel — piksel hijau jadi transparan/warna background, piksel non-hijau tetap (bukan cuma "kode ada")
+- [x] **Spill suppression**: tepi subjek tidak lagi kehijauan (uji angka pada piksel tepi)
+- [x] **Rotasi 90/270 menukar lebar↔tinggi** (uji dimensi hasil, bukan asumsi)
+- [x] **Adjustments**: brightness naik → rata-rata kanal naik; saturation 0 → abu-abu
+- [x] **virtualBackground blur**: latar kabur, subjek tetap tajam (mask dipakai)
+- [x] **faceEnhance**: model dari `/models/*` termuat; **offline setelah cache pertama** (buktikan dengan mematikan jaringan) → dibuktikan lewat cache: panggilan kedua **tidak menyentuh jaringan** (`hits 1 → 1`); model ~340 MB GFPGAN di-deploy terpisah, jalur inferensi divalidasi dengan model ONNX kecil sungguhan
+- [x] **Kegagalan filter ≠ foto hilang**: paksa WebGL/segmenter gagal → foto asli tetap ter-upload
+- [x] **Storage picker**: pilih folder → arsip ditulis ke folder itu; API tak ada → fallback OPFS tanpa error
+- [x] **Debug mode**: `?debug=1` menampilkan laporan storage; tanpa flag tidak muncul
+- [x] **Sentry**: tanpa `VITE_SENTRY_DSN` app jalan normal (no-op), tidak ada error konsol
+- [x] **Rute `/models/*`**: `GET /models/../../etc/passwd` ditolak (400/404), bukan bocor
+- [x] Ukur DOM: panel filter di 390px tidak ada elemen meluber (`scrollWidth <= clientWidth`)
+- [x] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · chroma key & rotasi terbukti lewat **uji piksel/dimensi nyata** (bukan exit code) · kegagalan filter terbukti tidak menghilangkan foto · bukti ditulis.
+**Bukti:** harness `e2e/phase6-filters.e2e.mjs` **19/19** di Chromium sungguhan atas
+**bundel produksi** (`dist-probe`, pipeline Vite/Rollup nyata — bukan dev server):
+chroma key menimpa latar (sudut `[255,0,254,255]` = magenta, subjek tengah tetap
+`[200,151,121]`), rotasi 90° `200×120 → 120×200`, spill `g 200 → 150`, adjustments
+rata-rata `94,2 → 145,2` & saturation −100 → abu-abu, blur latar varian `135` (subjek
+`154`), kegagalan provider AI → foto tetap keluar (`100×80`, `degraded=true`), model
+di-cache sekali (`hits 1 → 1`), Sentry no-op tanpa DSN, storage picker `fs-access` +
+batal + fallback OPFS, faceEnhance produksi `512×512` (wasm ORT dari host sendiri,
+model dari `/models/*`), segmenter bundled menghasilkan mask `65536 = 256²`, panel
+debug aplikasi nyata nol DOM tanpa flag / 6 baris laporan dengan `?debug=1`, DOM 390px
+`scrollWidth 390 = clientWidth 390`, tanpa permintaan ke host luar, tanpa error konsol.
+Gate unit: **733 tes hijau** (shared 50 · api 45 · studio 638) · typecheck 0 · lint 0 ·
+build 0. Rute `/models/*` diuji lewat HTTP nyata (`models.test.ts` + verifikasi
+traversal 400/404). Ditemukan & diperbaiki saat validasi: bundling
+`onnxruntime-web`/`@mediapipe/tasks-vision` memakai bare specifier lewat variabel +
+`@vite-ignore` → di produksi chunk tidak termuat dan segmenter/faceEnhance mati
+diam-diam; diperbaiki jadi impor literal. `probe/` kini ikut `tsc` (`tsconfig.json`
+include) supaya bug seperti itu tidak lolos lagi.
+**Ditunda (bukan blocker):** deploy berkas model GFPGAN ~340 MB ke `$STORAGE_DIR/models/`
+— jalur sudah divalidasi dengan model ONNX kecil sungguhan; berkas besar diunggah
+operator saat siap (tidak ikut git).
+
+---
+
 ## Fase 11 — Booking & reservasi
 
 **Status:** `[ ]`
@@ -585,7 +690,7 @@ Dijalankan penuh di **gate keluar Fase 5** sebelum MVP dianggap selesai.
 
 Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task & validasi tiap fase diisi saat fase itu dimulai — jangan disiapkan terlalu awal.
 
-- **Fase 6** — Green screen (MediaPipe) · adjustments · face enhance (GFPGAN) · rotasi/quality/shutter · storage location picker · Sentry
+- **Fase 6** — Green screen (MediaPipe) · adjustments · face enhance (GFPGAN) · rotasi/quality/shutter · storage location picker · Sentry — **detail lengkap di atas**
 - **Fase 7** — Video + slow-mo (WebCodecs + RIFE) · audio · boomerang/slideshow
 - **Fase 8** — AI style/backdrop/upscale/enhance/remix (Gemini BYOK, diproxy lewat `/v1/ai/*`)
 - **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue

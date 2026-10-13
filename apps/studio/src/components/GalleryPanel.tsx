@@ -187,6 +187,64 @@ function LoginCard(): React.JSX.Element {
   );
 }
 
+function ArchiveCard(): React.JSX.Element {
+  const { t } = useTranslation();
+  const { archive } = useGallery();
+  const [busy, setBusy] = useState(false);
+
+  const choose = useCallback(async () => {
+    setBusy(true);
+    try {
+      await archive.chooseFolder();
+    } finally {
+      setBusy(false);
+    }
+  }, [archive]);
+
+  const backend = archive.chosen ?? archive.available;
+  const label = t(`archive.backend.${backend}`);
+
+  return (
+    <section className="card card-wide" data-testid="gallery-archive">
+      <div className="capture-head">
+        <h2>{t("archive.title")}</h2>
+        <span className="badge" data-testid="archive-backend">
+          {label}
+        </span>
+      </div>
+      <p className="note">{t("archive.note")}</p>
+
+      <div className="field-row">
+        <button
+          className="btn btn-small"
+          type="button"
+          disabled={busy || archive.available === "none"}
+          data-testid="archive-choose"
+          onClick={() => void choose()}
+        >
+          {busy ? t("archive.choosing") : t("archive.choose")}
+        </button>
+        {archive.chosen !== null && (
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            data-testid="archive-clear"
+            onClick={archive.clearFolder}
+          >
+            {t("archive.clear")}
+          </button>
+        )}
+      </div>
+
+      {archive.available === "none" && (
+        <p className="note" data-testid="archive-unavailable">
+          {t("archive.unavailable")}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function GalleryPanel(): React.JSX.Element {
   const { t } = useTranslation();
   const { session, signOut, galleries, active, setActive, clearActive } = useGallery();
@@ -258,6 +316,8 @@ export default function GalleryPanel(): React.JSX.Element {
           </div>
         </section>
       )}
+
+      <ArchiveCard />
 
       <section className="card card-wide">
         <div className="capture-head">

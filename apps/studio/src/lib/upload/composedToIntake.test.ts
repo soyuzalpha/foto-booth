@@ -85,3 +85,57 @@ test("thumbnail yang berhasil dipakai, dan hanya untuk frame itu", async () => {
 test("daftar kosong menghasilkan daftar kosong", async () => {
   assert.deepEqual(await framesToIntake([]), []);
 });
+
+// ── filter (Fase 6) ───────────────────────────────────────────────────────
+
+test("process dipakai untuk mengganti byte & dimensi foto", async () => {
+  const [photo] = await framesToIntake([frame(0, { width: 4000, height: 3000 })], {
+    // Rotasi 90°: lebar/tinggi bertukar.
+    process: async () => ({ blob: new Blob(["terfilter"]), width: 3000, height: 4000 }),
+  });
+
+  assert.equal(await photo?.blob.text(), "terfilter");
+  assert.equal(photo?.width, 3000);
+  assert.equal(photo?.height, 4000);
+});
+
+test("process yang mengembalikan null tidak mengubah foto", async () => {
+  const [photo] = await framesToIntake([frame(0)], { process: async () => null });
+
+  assert.equal(await photo?.blob.text(), "foto-0");
+  assert.equal(photo?.width, 4000);
+});
+
+test("process yang melempar tidak menggagalkan foto — blob asli dipakai", async () => {
+  const photos = await framesToIntake([frame(0), frame(1)], {
+    process: async () => {
+      throw new Error("decode gagal");
+    },
+  });
+
+  assert.equal(photos.length, 2);
+  assert.equal(await photos[0]?.blob.text(), "foto-0");
+  assert.equal(await photos[1]?.blob.text(), "foto-1");
+});
+
+test("process yang mengembalikan blob kosong diabaikan", async () => {
+  const [photo] = await framesToIntake([frame(0)], {
+    process: async () => ({ blob: new Blob([]), width: 10, height: 10 }),
+  });
+
+  assert.equal(await photo?.blob.text(), "foto-0");
+  assert.equal(photo?.width, 4000);
+});
+
+test("thumbnail dibuat dari hasil filter, bukan dari foto mentah", async () => {
+  let thumbSource = "";
+  await framesToIntake([frame(0)], {
+    process: async () => ({ blob: new Blob(["terfilter"]), width: 100, height: 100 }),
+    makeThumb: async (blob) => {
+      thumbSource = await blob.text();
+      return new Blob(["thumb"]);
+    },
+  });
+
+  assert.equal(thumbSource, "terfilter");
+});

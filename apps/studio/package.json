@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@foto-booth/shared": "workspace:*",
+    "@mediapipe/tasks-vision": "^1.1.0",
     "i18next": "^24.2.2",
     "konva": "^9",
+    "onnxruntime-web": "^1.30.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

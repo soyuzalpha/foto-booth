@@ -17,11 +17,19 @@
 
 import type { CaptureErrorCode } from "../transports/errors.ts";
 import type { SignalState } from "../transports/signalMonitor.ts";
+import { normalizeShutterOffset } from "./shutterOffset.ts";
 
 export type SessionState =
   | "idle"
   | "armed"
   | "countdown"
+  /**
+   * Hitungan sudah nol, tapi frame **belum** diambil: sedang menunggu offset
+   * shutter (lihat `capture/shutterOffset.ts`). State tersendiri, bukan
+   * lanjutan countdown, supaya UI bisa membedakan "angka masih berjalan" dari
+   * "angka sudah nol, tunggu sebentar lagi".
+   */
+  | "shutter"
   | "capturing"
   | "review"
   | "processing"
@@ -49,6 +57,24 @@ export interface SessionConfig {
    * `0` = tunggu operator (default) — tamu tidak dipaksa buru-buru.
    */
   reviewMs: number;
+  /**
+   * Jeda kecil **setelah hitungan menyentuh nol** dan sebelum frame diambil,
+   * ms. 0 = langsung jepret. Dipakai untuk kompensasi kedip/gerak: angka di
+   * layar selesai, tapi jari & kelopak mata tamu belum tenang.
+   *
+   * Sengaja **terpisah** dari `countdownMs` — kalau ditambahkan ke hitungan,
+   * layar menampilkan "1" lebih lama dari yang tamu harapkan. Lihat
+   * `capture/shutterOffset.ts`.
+   */
+  shutterOffsetMs: number;
+  /**
+   * Sambungkan sendiri kamera saat aplikasi dibuka (kiosk).
+   *
+   * `true` = pilih device yang terakhir dipakai, kalau tidak ada pilih capture
+   * card, kalau tidak ada pilih yang pertama. Lihat `capture/autoConnect.ts`.
+   * Bisa dimatikan operator yang ingin memilih kamera sendiri.
+   */
+  autoConnect: boolean;
 }
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
@@ -56,6 +82,8 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   countdownMs: 3000,
   intervalMs: 1200,
   reviewMs: 0,
+  shutterOffsetMs: 0,
+  autoConnect: true,
 };
 
 /**
@@ -68,7 +96,7 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
 export const MAX_AUTO_RETRIES = 3;
 
 /** Kenapa kita sedang menunggu — supaya UI bisa menampilkan angka yang benar. */
-export type WaitKind = "countdown" | "interval" | "review";
+export type WaitKind = "countdown" | "shutter" | "interval" | "review";
 
 export interface SessionSnapshot {
   state: SessionState;
@@ -109,14 +137,16 @@ export type SessionEvent =
   | { type: "device"; deviceId: string | null };
 
 export function initialSnapshot(
-  config: SessionConfig = DEFAULT_SESSION_CONFIG,
+  config: Partial<SessionConfig> = {},
 ): SessionSnapshot {
+  const normalized = normalizeConfig({ ...DEFAULT_SESSION_CONFIG, ...config });
+
   return {
     state: "idle",
     signal: "unknown",
-    config: normalizeConfig(config),
+    config: normalized,
     shotIndex: 0,
-    frames: emptyFrames(config.shotCount),
+    frames: emptyFrames(normalized.shotCount),
     waitRemainingMs: 0,
     waitKind: "countdown",
     deviceId: null,
@@ -131,6 +161,10 @@ export function normalizeConfig(config: SessionConfig): SessionConfig {
     countdownMs: clampInt(config.countdownMs, 0, 60_000),
     intervalMs: clampInt(config.intervalMs, 0, 60_000),
     reviewMs: clampInt(config.reviewMs, 0, 60_000),
+    shutterOffsetMs: normalizeShutterOffset(config.shutterOffsetMs),
+    // Hanya `false` eksplisit yang mematikan; nilai hilang/aneh → auto-connect
+    // tetap hidup, karena itu perilaku yang benar untuk kiosk.
+    autoConnect: config.autoConnect !== false,
   };
 }
 
@@ -163,6 +197,7 @@ export function allCaptured(frames: readonly (string | null)[]): boolean {
 /** Waktu tunggu yang dibutuhkan untuk masuk ke sebuah slot. */
 function waitFor(snapshot: SessionSnapshot, kind: WaitKind): number {
   if (kind === "countdown") return snapshot.config.countdownMs;
+  if (kind === "shutter") return snapshot.config.shutterOffsetMs;
   if (kind === "interval") return snapshot.config.intervalMs;
   return snapshot.config.reviewMs;
 }
@@ -189,19 +224,39 @@ function enterReview(snapshot: SessionSnapshot, frames: readonly (string | null)
   };
 }
 
-/** Masuk ke slot `index`: mulai countdown, atau langsung capturing kalau 0. */
+/**
+ * Setelah hitungan menyentuh nol: ambil frame, atau tunda dulu sesuai offset
+ * shutter.
+ *
+ * Offset 0 (default) → perilaku lama tidak berubah, langsung `capturing`.
+ * Offset > 0 → masuk `shutter` selama offset itu; UI tidak menampilkan angka
+ * lagi, dan frame baru diambil setelah jeda habis.
+ */
+function enterShutter(snapshot: SessionSnapshot): SessionSnapshot {
+  const offset = snapshot.config.shutterOffsetMs;
+
+  if (offset <= 0) {
+    return { ...snapshot, state: "capturing", waitRemainingMs: 0 };
+  }
+
+  return { ...snapshot, state: "shutter", waitRemainingMs: offset, waitKind: "shutter" };
+}
+
+/**
+ * Masuk ke slot `index`: mulai countdown, atau — kalau waktunya 0 — langsung
+ * menuju ambang jepret (tetap lewat offset shutter).
+ */
 function enterSlot(snapshot: SessionSnapshot, index: number, kind: WaitKind): SessionSnapshot {
   const wait = waitFor(snapshot, kind);
 
   if (wait <= 0) {
-    return {
+    return enterShutter({
       ...snapshot,
-      state: "capturing",
       shotIndex: index,
       waitRemainingMs: 0,
       waitKind: kind,
       error: null,
-    };
+    });
   }
 
   return {
@@ -243,14 +298,15 @@ export function reduceSession(
     case "signal": {
       const next = { ...snapshot, signal: event.signal };
 
-      // Auto-recover: countdown sudah habis tapi tertahan karena sinyal hilang
-      // → lanjut jepret sekarang tanpa perlu aksi operator.
-      if (
-        event.signal === "ok" &&
-        next.state === "countdown" &&
-        next.waitRemainingMs <= 0
-      ) {
-        return { ...next, state: "capturing" };
+      // Auto-recover: hitungan (atau jeda offset shutter) sudah habis tapi
+      // tertahan karena sinyal hilang → lanjut sendiri begitu sinyal balik.
+      if (event.signal === "ok") {
+        if (next.state === "countdown" && next.waitRemainingMs <= 0) {
+          return enterShutter(next);
+        }
+        if (next.state === "shutter" && next.waitRemainingMs <= 0) {
+          return { ...next, state: "capturing", waitRemainingMs: 0 };
+        }
       }
 
       return next;
@@ -315,6 +371,20 @@ export function reduceSession(
           : { ...snapshot, waitRemainingMs: 0 };
       }
 
+      // Jeda offset shutter: hitungan sudah nol, tinggal menunggu jeda kecil
+      // sebelum frame benar-benar diambil.
+      if (snapshot.state === "shutter") {
+        const left = snapshot.waitRemainingMs - Math.max(0, event.elapsedMs);
+        if (left > 0) return { ...snapshot, waitRemainingMs: left };
+
+        // Sinyal hilang → tahan di 0, jangan jepret frame hitam.
+        if (snapshot.signal === "no-signal") {
+          return snapshot.waitRemainingMs === 0 ? snapshot : { ...snapshot, waitRemainingMs: 0 };
+        }
+
+        return { ...snapshot, state: "capturing", waitRemainingMs: 0 };
+      }
+
       if (snapshot.state !== "countdown") return snapshot;
 
       const remaining = snapshot.waitRemainingMs - Math.max(0, event.elapsedMs);
@@ -329,7 +399,7 @@ export function reduceSession(
         return snapshot.waitRemainingMs === 0 ? snapshot : { ...snapshot, waitRemainingMs: 0 };
       }
 
-      return { ...snapshot, state: "capturing", waitRemainingMs: 0 };
+      return enterShutter(snapshot);
     }
 
     case "frame-captured": {
@@ -446,7 +516,7 @@ export function reduceSession(
 
 /** Apakah state ini sedang menunggu timer (untuk mengaktifkan `tick`). */
 export function isWaiting(state: SessionState): boolean {
-  return state === "countdown";
+  return state === "countdown" || state === "shutter";
 }
 
 /** Apakah operator boleh menekan tombol jepret sekarang. */

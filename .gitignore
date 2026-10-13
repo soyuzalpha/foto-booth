@@ -12,6 +12,8 @@ out/
 # vite
 .vite/
 apps/studio/dist/
+# probe produksi (validasi faceEnhance) — artefak build, bukan sumber
+apps/studio/dist-probe/
 # service worker dev (dibuat vite-plugin-pwa saat `dev`) — artefak, bukan sumber
 apps/studio/dev-dist/
 

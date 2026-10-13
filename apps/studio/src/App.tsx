@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@foto-booth/shared";
 
 import CapturePanel from "./components/CapturePanel.tsx";
+import DebugPanel from "./components/DebugPanel.tsx";
 import GalleryPanel from "./components/GalleryPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
 import KioskPanel from "./components/KioskPanel.tsx";
@@ -319,6 +320,10 @@ function StudioApp(): React.JSX.Element {
           </summary>
           <StatusPanel />
         </details>
+
+        {/* Panel debug di luar panel status: `?debug=1` harus langsung terlihat,
+            bukan terkubur di dalam `<details>` yang tertutup. */}
+        <DebugPanel />
 
         {canInstall && (
           <section className="install" style={{ marginTop: 22 }}>

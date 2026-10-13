@@ -15,8 +15,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type { AspectRatioId } from "./capture/aspectRatio.ts";
+import { pickAutoConnectDevice, shouldAutoConnect } from "./capture/autoConnect.ts";
 import { CaptureSession } from "./capture/captureSession.ts";
 import { createFrameStore } from "./capture/frameStore.ts";
+import { deviceStorage, readRememberedDeviceId, rememberDeviceId } from "./capture/rememberedDevice.ts";
 import type { SessionConfig } from "./capture/stateMachine.ts";
 import { DEFAULT_SESSION_CONFIG, normalizeConfig } from "./capture/stateMachine.ts";
 import type { CaptureError } from "./transports/errors.ts";
@@ -139,6 +141,14 @@ export function useCaptureSession(): CaptureSnapshot & CaptureActions {
   // blob hidup sampai tab ditutup.
   const urls = useRef(new Map<string, string>());
 
+  // Auto-connect berjalan di dalam efek yang dibuat sekali, jadi ia tidak boleh
+  // menutup `config` dari render pertama — operator bisa mematikan auto-connect
+  // sesudahnya. Ref ini yang dibaca, bukan nilai yang tertangkap.
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
   useEffect(() => {
     const { store, kind } = createFrameStore();
     const picked = pickTransport();
@@ -149,8 +159,47 @@ export function useCaptureSession(): CaptureSnapshot & CaptureActions {
       mediaDevices: typeof navigator === "undefined" ? null : navigator.mediaDevices,
     });
 
+    // Ingatan device disimpan di luar sesi; `null` = localStorage tidak bisa
+    // dipakai, dan auto-connect tetap jalan tanpa ingatan.
+    const deviceStore = deviceStorage();
+
+    /**
+     * Sambungkan kamera sendiri saat daftar device tiba.
+     *
+     * Dipanggil dari `devices:changed`, bukan sekali di awal: daftar device
+     * baru terisi setelah izin diberikan, dan itulah saat pilihannya bermakna.
+     * `shouldAutoConnect` yang menahan agar tidak merebut kamera yang sudah
+     * dipakai operator.
+     */
+    const autoConnect = async (list: CameraDevice[]): Promise<void> => {
+      const current = created.getSnapshot();
+      if (
+        !shouldAutoConnect({
+          enabled: configRef.current.autoConnect,
+          devices: list,
+          currentDeviceId: current.deviceId,
+        })
+      ) {
+        return;
+      }
+
+      const pick = pickAutoConnectDevice(list, readRememberedDeviceId(deviceStore));
+      if (pick.deviceId === null) return;
+
+      try {
+        await created.connect(pick.deviceId);
+        rememberDeviceId(deviceStore, pick.deviceId);
+      } catch {
+        // Gagal auto-connect bukan kegagalan aplikasi: operator masih bisa
+        // memilih kamera manual dari dropdown. Error sudah lewat bus `error`.
+      }
+    };
+
     const unsubscribeError = created.on("error", (reported) => setError(reported));
-    const unsubscribeDevices = created.on("devices:changed", (list) => setDevices(list));
+    const unsubscribeDevices = created.on("devices:changed", (list) => {
+      setDevices(list);
+      void autoConnect(list);
+    });
     const unsubscribeMirror = created.on("mirror:changed", (value) => setMirror(value));
     const unsubscribeAspect = created.on("aspect:changed", (id) => setAspectState(id));
 
@@ -260,6 +309,9 @@ export function useCaptureSession(): CaptureSnapshot & CaptureActions {
       if (session === null) return;
       setError(null);
       await session.connect(deviceId);
+      // Ingat pilihan operator supaya auto-connect berikutnya menebak benar.
+      // Id kosong (belum berizin) tidak diingat — lihat `rememberedDevice.ts`.
+      rememberDeviceId(deviceStorage(), deviceId);
     },
     [session],
   );
