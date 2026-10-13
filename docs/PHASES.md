@@ -565,12 +565,17 @@ model dari `/models/*`), segmenter bundled menghasilkan mask `65536 = 256²`, pa
 debug aplikasi nyata nol DOM tanpa flag / 6 baris laporan dengan `?debug=1`, DOM 390px
 `scrollWidth 390 = clientWidth 390`, tanpa permintaan ke host luar, tanpa error konsol.
 Gate unit: **733 tes hijau** (shared 50 · api 45 · studio 638) · typecheck 0 · lint 0 ·
-build 0. Rute `/models/*` diuji lewat HTTP nyata (`models.test.ts` + verifikasi
-traversal 400/404). Ditemukan & diperbaiki saat validasi: bundling
+build 0. CI run **25** (`3a58dde`) hijau; container produksi
+`foto-booth:3a58dde` healthy di `127.0.0.1:5050`, dan `https://foto.soyuz.my.id`
+`/` `/health` `/studio/` `/models` = 200 (rute `/models/*` benar-benar live, bukan
+404). Ditemukan & diperbaiki saat validasi: (1) bundling
 `onnxruntime-web`/`@mediapipe/tasks-vision` memakai bare specifier lewat variabel +
 `@vite-ignore` → di produksi chunk tidak termuat dan segmenter/faceEnhance mati
-diam-diam; diperbaiki jadi impor literal. `probe/` kini ikut `tsc` (`tsconfig.json`
-include) supaya bug seperti itu tidak lolos lagi.
+diam-diam; kini impor literal, dan `probe/` ikut `tsc` (`tsconfig.json` include)
+supaya bug seperti itu tidak lolos lagi. (2) `.gitignore` punya pola `storage/`
+tanpa anchor → ikut mengabaikan `apps/studio/src/lib/storage/`, jadi
+`directoryPicker.ts` tak pernah ter-commit dan CI gagal typecheck; di-anchor ke
+`/storage/` (commit `3a58dde`).
 **Ditunda (bukan blocker):** deploy berkas model GFPGAN ~340 MB ke `$STORAGE_DIR/models/`
 — jalur sudah divalidasi dengan model ONNX kecil sungguhan; berkas besar diunggah
 operator saat siap (tidak ikut git).
