@@ -440,6 +440,15 @@ curl -s -o /dev/null -w '%{http_code}\n' https://foto.soyuz.my.id/health
 > Origin yang harus diizinkan: origin studio yang dipakai kiosk (mis.
 > `https://foto.soyuz.my.id`), bukan `*`.
 
+> **Prasyarat deploy — env API.** Sejak Fase 5 API **menolak start** kalau
+> `JWT_SECRET` (min 32 karakter) atau env `S3_*` kosong. CI mengurusnya sendiri:
+> `JWT_SECRET` dibuat sekali lalu disimpan di `storage/jwt.secret` (persisten —
+> kalau dibuat ulang tiap deploy, semua sesi operator & link tamu lama mati),
+> dan kredensial S3 dibaca dari `storage/foto-booth.env` (mode 600, gitignored).
+> Keduanya hidup di host, di luar repo. `S3_ENDPOINT` di file itu menunjuk
+> Garage di `127.0.0.1:3900`, jadi container API dijalankan dengan
+> `--network host` supaya bisa menjangkau bucket.
+
 - [ ] **Tutup tab saat offline → buka lagi → antrian masih ada** (persisten)
 - [ ] **Online kembali → upload jalan otomatis, tanpa aksi user** (bukti: foto muncul di `/a/:hash`)
 - [ ] QR discan dari HP lain → album kebuka, download jalan

@@ -63,7 +63,24 @@ jobs:
         run: |
           STORAGE_DIR="$HOME/app/foto-booth/storage"
           echo "STORAGE_DIR=$STORAGE_DIR" >> "$GITHUB_ENV"
-          mkdir -p "$STORAGE_DIR/templates" "$STORAGE_DIR/content" "$STORAGE_DIR/gallery"
+          mkdir -p "$STORAGE_DIR/templates" "$STORAGE_DIR/content" "$STORAGE_DIR/gallery" \
+                   "$STORAGE_DIR/data" "$STORAGE_DIR/data-test"
+
+          # Rahasia JWT dibuat sekali lalu disimpan di storage (di luar repo,
+          # gitignored). Kalau dibuat ulang tiap deploy, sesi operator dan link
+          # galeri tamu yang lama ikut mati — jadi harus persisten.
+          if [ ! -s "$STORAGE_DIR/jwt.secret" ]; then
+            head -c 48 /dev/urandom | base64 | tr -d '\n' > "$STORAGE_DIR/jwt.secret"
+            echo "JWT_SECRET dibuat baru di $STORAGE_DIR/jwt.secret"
+          fi
+          chmod 600 "$STORAGE_DIR/jwt.secret"
+
+          # Kredensial bucket S3 (Garage) milik host; tidak boleh ada di repo.
+          # Tanpa file ini API menolak start (S3 env belum lengkap).
+          if [ ! -s "$STORAGE_DIR/foto-booth.env" ]; then
+            echo "::error::$STORAGE_DIR/foto-booth.env tidak ada — isi dulu kredensial S3 sebelum deploy."
+            exit 1
+          fi
 
       - name: Build Docker image
         run: docker build -t foto-booth:${{ github.sha }} .
@@ -72,10 +89,20 @@ jobs:
         run: |
           docker rm -f foto-booth-test 2>/dev/null || true
 
+          # --network host: API harus bisa menjangkau Garage di 127.0.0.1:3900
+          # (bucket S3 bind ke loopback host). Tanpa ini container hidup tapi
+          # tidak bisa list/hapus/serve objek. HOST=127.0.0.1 menjaga API tetap
+          # hanya di loopback (dulu dijamin oleh `-p 127.0.0.1:5050:5050`).
+          # DATA_DIR terpisah supaya tidak bentrok dengan DB produksi.
           docker run -d \
             --name foto-booth-test \
+            --network host \
+            -e HOST=127.0.0.1 \
+            -e PORT=5150 \
+            -e DATA_DIR=/app/storage/data-test \
+            -e JWT_SECRET="$(cat "$STORAGE_DIR/jwt.secret")" \
+            --env-file "$STORAGE_DIR/foto-booth.env" \
             -v "$STORAGE_DIR:/app/storage" \
-            -p 127.0.0.1:5150:5050 \
             foto-booth:${{ github.sha }}
 
       # /health membaca state runtime, jadi ini juga membuktikan prosesnya
@@ -102,8 +129,12 @@ jobs:
           docker run -d \
             --name foto-booth \
             --restart unless-stopped \
+            --network host \
+            -e HOST=127.0.0.1 \
+            -e DATA_DIR=/app/storage/data \
+            -e JWT_SECRET="$(cat "$STORAGE_DIR/jwt.secret")" \
+            --env-file "$STORAGE_DIR/foto-booth.env" \
             -v "$STORAGE_DIR:/app/storage" \
-            -p 127.0.0.1:5050:5050 \
             foto-booth:${{ github.sha }}
 
       - name: Production health check
