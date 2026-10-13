@@ -90,9 +90,27 @@ test("item `local-only` tidak dipasangi timer (belum punya byte)", () => {
   assert.equal(nextDelayMs(items, NOW, TICK), null);
 });
 
-test("item `uploading` tidak dipasangi timer (sedang dikerjakan)", () => {
+test("item `uploading` yang tersisa = orphan → dijadwalkan, bukan diam selamanya", () => {
+  // Penjadwalan hanya dihitung saat tidak ada putaran berjalan, jadi `uploading`
+  // yang masih tersimpan pasti sisa tab yang ditutup di tengah upload. Runner
+  // memulihkannya jadi `queued` saat dijalankan; tanpa dijadwalkan, item itu
+  // menggantung sampai operator menekan "Send now" — persis yang bikin antrian
+  // tidak pulih sendiri setelah refresh.
   const items = [item({ id: "a", state: "uploading", attempts: 1, nextAttemptAt: null })];
-  assert.equal(nextDelayMs(items, NOW, TICK), null);
+  assert.equal(nextDelayMs(items, NOW, TICK), TICK);
+});
+
+test("orphan `uploading` tidak menunggu backoff item lain yang masih jauh", () => {
+  const items = [
+    item({ id: "a", state: "uploading", attempts: 1, nextAttemptAt: null }),
+    item({ id: "b", state: "queued", nextAttemptAt: "2026-01-01T01:00:00.000Z" }),
+  ];
+  assert.equal(nextDelayMs(items, NOW, TICK), TICK);
+});
+
+test("hanya `uploading` tanpa `queued` tetap dapat timer, bukan null", () => {
+  const items = [item({ id: "a", state: "uploading", attempts: 1, nextAttemptAt: null })];
+  assert.notEqual(nextDelayMs(items, NOW, TICK), null);
 });
 
 test("item `uploaded` diabaikan walau ada item pending lain", () => {

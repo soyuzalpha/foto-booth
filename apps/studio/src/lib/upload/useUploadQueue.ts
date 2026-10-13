@@ -83,11 +83,19 @@ function sortItems(items: UploadItem[]): UploadItem[] {
  * yang perlu ditunggu. Dipisah dari hook supaya bisa diuji sendiri.
  */
 export function nextDelayMs(items: readonly UploadItem[], now: Date, tickMs: number): number | null {
+  // Item `uploading` yang tersisa di sini **bukan** yang sedang berjalan:
+  // penjadwalan hanya dihitung saat `running` false, dan satu putaran selalu
+  // menuntaskan setiap item yang diambilnya. Jadi `uploading` yang masih
+  // tersimpan = tab ditutup di tengah upload (orphan). Runner mengembalikannya
+  // ke `queued` saat dijalankan — tapi kalau tidak ada yang menjadwalkan
+  // putaran, item itu menggantung selamanya sampai operator menekan "Send now".
+  // Jadwalkan sekarang juga.
+  if (items.some((item) => item.state === "uploading")) return tickMs;
+
   // Hanya `queued` yang bisa diambil `nextBatch`. `uploaded`/`failed` sudah
-  // selesai; `local-only` belum punya byte; `uploading` sedang dikerjakan.
-  // Memasukkan state lain ke sini bikin timer menunggu item yang tidak akan
-  // pernah jalan — pada `local-only` (nextAttemptAt null) bahkan jadi timer
-  // 50 ms yang berputar selamanya.
+  // selesai; `local-only` belum punya byte. Memasukkan state lain ke sini bikin
+  // timer menunggu item yang tidak akan pernah jalan — pada `local-only`
+  // (nextAttemptAt null) bahkan jadi timer 50 ms yang berputar selamanya.
   const pending = items.filter((item) => item.state === "queued");
   if (pending.length === 0) return null;
 
