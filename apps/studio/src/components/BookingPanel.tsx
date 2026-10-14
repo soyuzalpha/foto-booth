@@ -30,6 +30,13 @@ import {
 
 import { useGallery } from "../lib/gallery/galleryContext.ts";
 import { useBookings } from "../lib/booking/useBookings.ts";
+import type {
+  BookingMessageKind,
+  BookingNotification,
+  ClientInvoice,
+  PendingReminder,
+} from "../lib/booking/bookingClient.ts";
+import { downloadBlob } from "../lib/template/exportPng.ts";
 
 const IDR = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -39,6 +46,27 @@ const IDR = new Intl.NumberFormat("id-ID", {
 
 function rupiah(value: number): string {
   return IDR.format(value);
+}
+
+/**
+ * Salin teks ke papan klip.
+ *
+ * Mengembalikan `false` kalau peramban menolak (konteks tidak aman / izin
+ * ditolak). Panel lalu memberi tahu operator untuk menyalin manual, bukan
+ * menampilkan "tersalin" padahal papan klipnya kosong.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Unduh teks sebagai berkas `.txt` — jalur cadangan kalau salin diblokir. */
+function downloadText(text: string, filename: string): void {
+  downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), filename);
 }
 
 /** Sesi belum ada: arahkan ke tab yang punya formulir masuknya. */
@@ -90,6 +118,93 @@ function ReportCard({
   );
 }
 
+/**
+ * Invoice satu booking.
+ *
+ * Angka yang tampil semuanya berasal dari server (`statusLabel`, `totalIdr`, …)
+ * — panel tidak menghitung ulang, supaya tagihan yang dilihat operator sama
+ * persis dengan yang dikirim ke tamu. Teks mentahnya tidak dipamerkan di layar
+ * (butuh CSS baru untuk blok multiline); operator menyalin atau mengunduhnya.
+ */
+function InvoiceCard({
+  invoice,
+  text,
+  onClose,
+  onFeedback,
+}: {
+  invoice: ClientInvoice["invoice"];
+  text: string;
+  onClose: () => void;
+  onFeedback: (message: string) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <div className="card" data-testid={`booking-invoice-${invoice.number}`}>
+      <div className="capture-head">
+        <strong>{invoice.number}</strong>
+        <span className={`badge ${invoice.status === "paid" ? "badge-ok" : "badge-warn"}`}>
+          {invoice.statusLabel}
+        </span>
+      </div>
+
+      <dl>
+        <div className="row">
+          <dt>{t("booking.invoice.when")}</dt>
+          <dd>{invoice.scheduledAt}</dd>
+        </div>
+        <div className="row">
+          <dt>{t("booking.invoice.total")}</dt>
+          <dd data-testid="booking-invoice-total">{rupiah(invoice.totalIdr)}</dd>
+        </div>
+        <div className="row">
+          <dt>{t("booking.invoice.paid")}</dt>
+          <dd data-testid="booking-invoice-paid">{rupiah(invoice.paidIdr)}</dd>
+        </div>
+        <div className="row">
+          <dt>{t("booking.invoice.balance")}</dt>
+          <dd data-testid="booking-invoice-balance">{rupiah(invoice.balanceDueIdr)}</dd>
+        </div>
+        <div className="row">
+          <dt>{t("booking.invoice.deposit")}</dt>
+          <dd>{invoice.depositStatusLabel}</dd>
+        </div>
+      </dl>
+
+      <div className="field-row">
+        <button
+          className="btn btn-small"
+          type="button"
+          data-testid={`booking-invoice-copy-${invoice.number}`}
+          onClick={() => {
+            void copyText(text).then((ok) => {
+              onFeedback(t(ok ? "booking.invoice.copied" : "booking.invoice.copyFailed"));
+            });
+          }}
+        >
+          {t("booking.invoice.copy")}
+        </button>
+        <button
+          className="btn btn-ghost btn-small"
+          type="button"
+          data-testid={`booking-invoice-download-${invoice.number}`}
+          onClick={() => downloadText(text, `${invoice.number}.txt`)}
+        >
+          {t("booking.invoice.download")}
+        </button>
+        <button
+          className="btn btn-ghost btn-small"
+          type="button"
+          data-testid={`booking-invoice-close-${invoice.number}`}
+          onClick={onClose}
+        >
+          {t("booking.invoice.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BookingRow({
   booking,
   timezoneOffsetMinutes,
@@ -97,6 +212,8 @@ function BookingRow({
   onStatus,
   onDeposit,
   onReschedule,
+  onInvoice,
+  onNotify,
 }: {
   booking: Booking;
   timezoneOffsetMinutes: number;
@@ -104,12 +221,53 @@ function BookingRow({
   onStatus: (id: string, status: BookingOperatorStatus, reason?: string) => Promise<void>;
   onDeposit: (id: string, status: DepositStatus) => Promise<void>;
   onReschedule: (id: string, start: string) => Promise<void>;
+  onInvoice: (id: string) => Promise<ClientInvoice | null>;
+  onNotify: (id: string, kind: BookingMessageKind) => Promise<BookingNotification | null>;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [rescheduling, setRescheduling] = useState(false);
   const [newStart, setNewStart] = useState("");
+  const [invoice, setInvoice] = useState<ClientInvoice | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [message, setMessage] = useState<BookingNotification | null>(null);
 
   const terminal = booking.status === "cancelled" || booking.status === "rejected" || booking.status === "completed";
+
+  const openInvoice = useCallback(async () => {
+    setFeedback(null);
+    const result = await onInvoice(booking.id);
+    if (result === null) {
+      setInvoice(null);
+      setFeedback(t("booking.invoice.failed"));
+      return;
+    }
+    setInvoice(result);
+  }, [booking.id, onInvoice, t]);
+
+  /**
+   * Kirim (atau siapkan) satu pesan ke tamu.
+   *
+   * `delivered` dari server yang menentukan kalimatnya: selama SMTP belum ada,
+   * panel harus bilang "teks siap, kirim manual" — bukan "terkirim".
+   */
+  const send = useCallback(
+    async (kind: BookingMessageKind) => {
+      setFeedback(null);
+      setMessage(null);
+      const result = await onNotify(booking.id, kind);
+      if (result === null) {
+        setFeedback(t("booking.notify.failed"));
+        return;
+      }
+      setMessage(result);
+      setFeedback(
+        result.delivered
+          ? t("booking.notify.sent", { email: booking.email })
+          : t("booking.notify.manual"),
+      );
+    },
+    [booking.email, booking.id, onNotify, t],
+  );
 
   return (
     <li className="gallery-list" data-testid={`booking-row-${booking.id}`}>
@@ -224,6 +382,37 @@ function BookingRow({
             {t("booking.action.markPaid")}
           </button>
         )}
+        <button
+          className="btn btn-ghost btn-small"
+          type="button"
+          disabled={busy}
+          data-testid={`booking-invoice-open-${booking.id}`}
+          onClick={() => void openInvoice()}
+        >
+          {t("booking.invoice.open")}
+        </button>
+        {booking.status === "approved" && (
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            disabled={busy}
+            data-testid={`booking-notify-reminder-${booking.id}`}
+            onClick={() => void send("reminder")}
+          >
+            {t("booking.notify.remind")}
+          </button>
+        )}
+        {booking.status === "requested" && (
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            disabled={busy}
+            data-testid={`booking-notify-confirmation-${booking.id}`}
+            onClick={() => void send("confirmation")}
+          >
+            {t("booking.notify.confirm")}
+          </button>
+        )}
       </div>
 
       {rescheduling && (
@@ -253,6 +442,49 @@ function BookingRow({
             {t("booking.action.saveTime")}
           </button>
         </div>
+      )}
+
+      {feedback !== null && (
+        <p className="note" role="status" data-testid={`booking-feedback-${booking.id}`}>
+          {feedback}
+        </p>
+      )}
+
+      {message !== null && (
+        <div className="field-row" data-testid={`booking-message-${booking.id}`}>
+          {/* Tautan WA memakai nomor tamu apa adanya dari server; pesannya
+              sendiri disusun shared, jadi operator tidak mengetik ulang. */}
+          <a
+            className="btn btn-small"
+            href={message.whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid={`booking-wa-${booking.id}`}
+          >
+            {t("booking.notify.openWa")}
+          </a>
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            data-testid={`booking-message-copy-${booking.id}`}
+            onClick={() => {
+              void copyText(message.body).then((ok) => {
+                setFeedback(t(ok ? "booking.invoice.copied" : "booking.invoice.copyFailed"));
+              });
+            }}
+          >
+            {t("booking.notify.copy")}
+          </button>
+        </div>
+      )}
+
+      {invoice !== null && (
+        <InvoiceCard
+          invoice={invoice.invoice}
+          text={invoice.text}
+          onClose={() => setInvoice(null)}
+          onFeedback={setFeedback}
+        />
       )}
     </li>
   );
@@ -501,6 +733,95 @@ function SettingsCard({
   );
 }
 
+/**
+ * Daftar pengingat H-1.
+ *
+ * Kartu ini ada karena kanal kirim belum tentu hidup: selama SMTP belum
+ * terpasang, server tetap menyusun teksnya dan operator yang mengirim manual
+ * lewat WhatsApp. Karena itu kartu ini **selalu** menampilkan pesan siap kirim,
+ * dan hanya menyebut "otomatis" kalau kanalnya benar-benar hidup.
+ */
+function RemindersCard({
+  reminders,
+  loading,
+  notifierLive,
+  onRefresh,
+}: {
+  reminders: PendingReminder[];
+  loading: boolean;
+  notifierLive: boolean;
+  onRefresh: () => Promise<void>;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  return (
+    <section className="card card-wide" data-testid="booking-reminders">
+      <h2>{t("booking.reminders.title")}</h2>
+      <p className="note" data-testid="booking-reminders-channel">
+        {t(notifierLive ? "booking.reminders.auto" : "booking.reminders.manual")}
+      </p>
+
+      {reminders.length === 0 ? (
+        <p className="note">{loading ? t("booking.loading") : t("booking.reminders.empty")}</p>
+      ) : (
+        <ul className="gallery-list">
+          {reminders.map((reminder) => (
+            <li key={reminder.bookingId} data-testid={`booking-reminder-${reminder.bookingId}`}>
+              <div className="capture-head">
+                <strong>{reminder.name}</strong>
+                <span className="badge badge-warn">{formatDateTimeId(reminder.start, 0)}</span>
+              </div>
+              <p className="note">{reminder.body}</p>
+              <div className="field-row">
+                <a
+                  className="btn btn-small"
+                  href={reminder.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`booking-reminder-wa-${reminder.bookingId}`}
+                >
+                  {t("booking.notify.openWa")}
+                </a>
+                <button
+                  className="btn btn-ghost btn-small"
+                  type="button"
+                  data-testid={`booking-reminder-copy-${reminder.bookingId}`}
+                  onClick={() => {
+                    void copyText(reminder.body).then((ok) => {
+                      setFeedback(t(ok ? "booking.invoice.copied" : "booking.invoice.copyFailed"));
+                    });
+                  }}
+                >
+                  {t("booking.notify.copy")}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {feedback !== null && (
+        <p className="note" role="status" data-testid="booking-reminders-feedback">
+          {feedback}
+        </p>
+      )}
+
+      <div className="field-row">
+        <button
+          className="btn btn-small"
+          type="button"
+          disabled={loading}
+          data-testid="booking-reminders-refresh"
+          onClick={() => void onRefresh()}
+        >
+          {loading ? t("booking.loading") : t("booking.refresh")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function BookingPanel(): React.JSX.Element {
   const { t } = useTranslation();
   const { session } = useGallery();
@@ -515,6 +836,26 @@ export default function BookingPanel(): React.JSX.Element {
       await action();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  /**
+   * Varian `run` yang mengembalikan hasilnya.
+   *
+   * Dipakai aksi yang nilainya dipakai pemanggil (invoice, notifikasi).
+   * Kegagalannya tetap dicatat sebagai banner error yang sama, dan nilainya
+   * `null` — jadi pemanggil tidak perlu `try/catch` sendiri.
+   */
+  const runResult = useCallback(async <T,>(action: () => Promise<T>): Promise<T | null> => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      return await action();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+      return null;
     } finally {
       setBusy(false);
     }
@@ -578,11 +919,20 @@ export default function BookingPanel(): React.JSX.Element {
                 }
                 onDeposit={(id, status) => run(() => bookings.setDeposit(id, status))}
                 onReschedule={(id, start) => run(() => bookings.reschedule(id, { start }))}
+                onInvoice={(id) => runResult(() => bookings.loadInvoice(id))}
+                onNotify={(id, kind) => runResult(() => bookings.notify(id, kind))}
               />
             ))}
           </ul>
         )}
       </section>
+
+      <RemindersCard
+        reminders={bookings.reminders?.reminders ?? []}
+        loading={bookings.loading}
+        notifierLive={bookings.reminders?.notifierLive ?? false}
+        onRefresh={() => run(() => bookings.refreshReminders())}
+      />
 
       <PackageCard
         packages={bookings.packages}

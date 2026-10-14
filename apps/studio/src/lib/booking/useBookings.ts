@@ -31,7 +31,11 @@ import {
 import {
   createBookingClient,
   type BookingClient,
+  type BookingMessageKind,
+  type BookingNotification,
+  type BookingReminders,
   type BookingReport,
+  type ClientInvoice,
 } from "./bookingClient.ts";
 
 export interface UseBookingsOptions {
@@ -46,6 +50,8 @@ export interface BookingsState {
   packages: BookingPackage[];
   settings: BookingSettings;
   report: BookingReport | null;
+  /** Booking yang menunggu pengingat H-1 + status kanal kirim. */
+  reminders: BookingReminders | null;
   loading: boolean;
   error: string | null;
 }
@@ -53,12 +59,19 @@ export interface BookingsState {
 export interface BookingsActions {
   refresh: () => Promise<void>;
   refreshReport: (range?: { from?: string; to?: string }) => Promise<void>;
+  refreshReminders: () => Promise<void>;
   createPackage: (body: CreateBookingPackage) => Promise<BookingPackage>;
   updatePackage: (id: string, body: UpdateBookingPackage) => Promise<BookingPackage>;
   updateSettings: (body: UpdateBookingSettings) => Promise<BookingSettings>;
   setStatus: (id: string, body: UpdateBookingStatus) => Promise<Booking>;
   setDeposit: (id: string, status: DepositStatus) => Promise<Booking>;
   reschedule: (id: string, body: RescheduleBooking) => Promise<Booking>;
+  /** Ambil invoice + kwitansi satu booking. Tidak mengubah daftar. */
+  loadInvoice: (id: string) => Promise<ClientInvoice>;
+  /** Unduh kwitansi teks polos apa adanya dari server. */
+  loadInvoiceText: (id: string) => Promise<string>;
+  /** Kirim/siapkan pesan ke tamu; mengembalikan apa yang benar-benar terjadi. */
+  notify: (id: string, kind: BookingMessageKind) => Promise<BookingNotification>;
 }
 
 export interface BookingsController extends BookingsActions {
@@ -70,6 +83,7 @@ const EMPTY_STATE: BookingsState = {
   packages: [],
   settings: DEFAULT_BOOKING_SETTINGS,
   report: null,
+  reminders: null,
   loading: false,
   error: null,
 };
@@ -132,6 +146,20 @@ export function createBookingsController(options: {
     }
   }
 
+  async function refreshReminders(): Promise<void> {
+    const client = options.client;
+    if (client === null) return;
+
+    try {
+      const reminders = await client.reminders();
+      set({ ...state, reminders });
+    } catch (error) {
+      // Sama seperti laporan: gagal memuat pengingat tidak boleh mengosongkan
+      // daftar booking yang sudah tampil.
+      set({ ...state, error: messageOf(error) });
+    }
+  }
+
   /** Aksi yang mengubah data selalu memuat ulang dari server, bukan menambal lokal. */
   async function mutate<T>(action: () => Promise<T>): Promise<T> {
     const result = await action();
@@ -143,6 +171,7 @@ export function createBookingsController(options: {
     getState: () => state,
     refresh,
     refreshReport,
+    refreshReminders,
 
     async createPackage(body) {
       const client = options.client;
@@ -179,6 +208,31 @@ export function createBookingsController(options: {
       if (client === null) throw new Error("belum login");
       return mutate(() => client.reschedule(id, body));
     },
+
+    async loadInvoice(id) {
+      const client = options.client;
+      if (client === null) throw new Error("belum login");
+      // Bukan `mutate`: membaca invoice tidak mengubah daftar booking, jadi
+      // tidak perlu memicu muat ulang penuh.
+      return client.invoice(id);
+    },
+
+    async loadInvoiceText(id) {
+      const client = options.client;
+      if (client === null) throw new Error("belum login");
+      return client.invoiceText(id);
+    },
+
+    async notify(id, kind) {
+      const client = options.client;
+      if (client === null) throw new Error("belum login");
+      const result = await client.notify(id, kind);
+      // Pengingat yang benar-benar terkirim menandai `reminded_at` di server;
+      // daftar pengingat harus ikut menyusut, bukan tetap menampilkan booking
+      // yang baru saja diingatkan.
+      if (result.delivered && kind === "reminder") await refreshReminders();
+      return result;
+    },
   };
 }
 
@@ -206,6 +260,7 @@ export function useBookings(options: UseBookingsOptions): BookingsState & Bookin
     // menampilkan "belum ada data" padahal datanya ada — terbaca seperti
     // laporan kosong, bukan seperti belum dimuat.
     void controller.refreshReport();
+    void controller.refreshReminders();
   }, [controller]);
 
   return useMemo(
@@ -213,12 +268,16 @@ export function useBookings(options: UseBookingsOptions): BookingsState & Bookin
       ...state,
       refresh: controller.refresh,
       refreshReport: controller.refreshReport,
+      refreshReminders: controller.refreshReminders,
       createPackage: controller.createPackage,
       updatePackage: controller.updatePackage,
       updateSettings: controller.updateSettings,
       setStatus: controller.setStatus,
       setDeposit: controller.setDeposit,
       reschedule: controller.reschedule,
+      loadInvoice: controller.loadInvoice,
+      loadInvoiceText: controller.loadInvoiceText,
+      notify: controller.notify,
     }),
     [controller, state],
   );

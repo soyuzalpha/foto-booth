@@ -445,6 +445,35 @@
       "providerNote": "Only manual mode is available. Gateway options appear in the payments phase.",
       "requireDeposit": "Require a deposit before locking the slot",
       "save": "Save settings"
+    },
+    "invoice": {
+      "open": "Invoice",
+      "when": "Session time",
+      "total": "Total",
+      "paid": "Paid",
+      "balance": "Balance due",
+      "deposit": "Deposit",
+      "copy": "Copy receipt",
+      "download": "Download .txt",
+      "close": "Close",
+      "copied": "Receipt copied.",
+      "copyFailed": "Clipboard blocked by the browser — copy manually from the .txt download.",
+      "failed": "Invoice could not be loaded."
+    },
+    "notify": {
+      "remind": "D-1 reminder",
+      "confirm": "Confirmation",
+      "openWa": "Send via WhatsApp",
+      "copy": "Copy message",
+      "sent": "Message sent to {{email}}.",
+      "manual": "Text ready. The email channel is not active — send it manually via WhatsApp.",
+      "failed": "The message could not be prepared."
+    },
+    "reminders": {
+      "title": "D-1 reminders",
+      "auto": "Email channel is active — these reminders are sent automatically.",
+      "manual": "Email channel is not active yet. The text below is ready to send manually via WhatsApp.",
+      "empty": "No booking is waiting for a reminder."
     }
   },
   "leads": {

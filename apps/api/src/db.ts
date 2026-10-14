@@ -306,6 +306,17 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_activation_codes_order ON activation_codes(order_id);
     `,
   },
+  {
+    id: 8,
+    name: "booking-reminders",
+    // Fase 11 (sisa). Satu kolom, dan alasannya bukan sekadar "supaya ada
+    // pengingat": tanpa penanda ini, sapuan pengingat yang jalan tiap jam akan
+    // mengirim pesan yang sama berulang kali ke orang yang sama. `NULL` berarti
+    // "belum pernah diingatkan"; diisi saat pengingat benar-benar dikirim.
+    sql: `
+      ALTER TABLE bookings ADD COLUMN reminded_at TEXT;
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

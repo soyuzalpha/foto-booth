@@ -24,6 +24,7 @@ import { licenseRoutes } from "./routes/license.ts";
 import { modelRoutes } from "./routes/models.ts";
 import { shareRoutes } from "./routes/share.ts";
 import { scheduleTtlCleanup } from "./jobs/ttl.ts";
+import { scheduleBookingReminders } from "./jobs/reminders.ts";
 
 /**
  * Bangun aplikasi Fastify.
@@ -34,7 +35,7 @@ import { scheduleTtlCleanup } from "./jobs/ttl.ts";
  */
 export async function buildApp(
   ctx: ServerContext,
-  options: { logger?: boolean; ttlJob?: boolean } = {},
+  options: { logger?: boolean; ttlJob?: boolean; reminderJob?: boolean } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? true,
@@ -110,6 +111,12 @@ export async function buildApp(
   // di tes supaya tidak ada timer latar yang mengubah hasil.
   if (options.ttlJob !== false) {
     scheduleTtlCleanup(ctx, { logger: app.log });
+  }
+
+  // Job pengingat booking H-1 (Fase 11). Dimatikan di tes dengan alasan yang
+  // sama: timer latar tidak boleh mengubah hasil tes.
+  if (options.reminderJob !== false) {
+    scheduleBookingReminders(ctx, { logger: app.log });
   }
 
   // Katalog konten yang dibundel — di-serve statis supaya studio bisa

@@ -38,6 +38,35 @@ export const logMailer: Mailer = {
   },
 };
 
+/**
+ * Kanal pengiriman pesan booking (Fase 11).
+ *
+ * `live` sengaja jadi bagian dari kontrak, bukan detail implementasi: route
+ * yang membalas ke operator harus bisa mengatakan "email benar-benar terkirim"
+ * vs "pesan disiapkan, SMTP belum ada" — dan itu tidak bisa ditebak dari nama
+ * fungsi. WhatsApp tidak punya metode kirim di sini karena memang belum ada
+ * Business API: yang disiapkan hanyalah tautan `wa.me` untuk ditekan operator.
+ */
+export interface BookingNotifier {
+  email(to: string, subject: string, body: string): Promise<void>;
+  /** `true` hanya kalau pesan benar-benar keluar dari server. */
+  readonly live: boolean;
+}
+
+/**
+ * Notifier default: tulis ke log.
+ *
+ * Sama alasannya dengan `logMailer` — selama SMTP belum dikonfigurasi, mencatat
+ * pesan yang *akan* dikirim lebih jujur daripada mengaku sudah mengirim.
+ */
+export const logNotifier: BookingNotifier = {
+  live: false,
+  email(to, subject, body) {
+    console.log(`[booking-mail] → ${to} · ${subject}\n${body}`);
+    return Promise.resolve();
+  },
+};
+
 export interface ServerContext {
   db: Db;
   s3: S3Config;
@@ -45,6 +74,15 @@ export interface ServerContext {
   now: () => Date;
   fetch: typeof globalThis.fetch;
   mailer: Mailer;
+  /**
+   * Kanal kirim pesan booking (konfirmasi & pengingat, Fase 11).
+   *
+   * Terpisah dari `mailer` karena keduanya punya bentuk yang berbeda: `mailer`
+   * mengirim *kode* ke operator yang sedang login, sedangkan ini mengirim
+   * *pesan* ke tamu. Menggabungkannya berarti template OTP dan template tamu
+   * hidup di satu fungsi.
+   */
+  notifier: BookingNotifier;
   /**
    * `true` hanya kalau `OTP_DEV_MODE=1`. Membuat balasan `otp/request` memuat
    * kodenya supaya bisa dipakai tanpa kotak masuk. Jangan pernah di produksi.
@@ -59,6 +97,7 @@ export interface ContextOptions {
   now?: () => Date;
   fetch?: typeof globalThis.fetch;
   mailer?: Mailer;
+  notifier?: BookingNotifier;
   exposeOtpCode?: boolean;
 }
 
@@ -88,6 +127,7 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, overrides: C
     now: overrides.now ?? (() => new Date()),
     fetch: overrides.fetch ?? globalThis.fetch,
     mailer: overrides.mailer ?? logMailer,
+    notifier: overrides.notifier ?? logNotifier,
     exposeOtpCode: overrides.exposeOtpCode ?? env.OTP_DEV_MODE === "1",
   };
 }

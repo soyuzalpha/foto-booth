@@ -636,6 +636,80 @@ async function main() {
       assert.equal(report.json.packages[0].packageId, pkg.id);
     });
 
+    await step("Invoice operator berasal dari data booking, bukan angka hardcode", async () => {
+      const admin = await call("GET", "/v1/booking/admin/bookings", { token });
+      const target = admin.json.bookings.find((row) => row.name === "Tamu Pertama");
+      assert.ok(target, "booking Tamu Pertama harus ada");
+
+      const res = await call("GET", `/v1/booking/admin/bookings/${target.id}/invoice`, { token });
+      assert.equal(res.status, 200, JSON.stringify(res.json));
+      assert.match(res.json.invoice.number, /^INV-\d{6}-[0-9A-Z]{4,6}$/, "nomor invoice mengikuti format");
+
+      // Angka tagihan dibandingkan dengan booking yang sama — kalau keduanya
+      // bergeser bersama, tesnya tetap menangkap invoice yang salah hitung.
+      assert.equal(res.json.invoice.totalIdr, target.priceIdr);
+      assert.equal(res.json.invoice.paidIdr, target.depositIdr);
+      assert.equal(res.json.invoice.balanceDueIdr, target.priceIdr - target.depositIdr);
+      assert.ok(res.json.invoice.statusLabel, "label status datang dari server");
+      assert.ok(res.json.text.includes(res.json.invoice.number), "kwitansi memuat nomor invoice");
+    });
+
+    await step("Invoice tanpa sesi ditolak 401", async () => {
+      const admin = await call("GET", "/v1/booking/admin/bookings", { token });
+      const target = admin.json.bookings[0];
+      const res = await call("GET", `/v1/booking/admin/bookings/${target.id}/invoice`);
+      assert.equal(res.status, 401, JSON.stringify(res.json));
+    });
+
+    await step("Kwitansi .txt terunduh sebagai teks polos", async () => {
+      const admin = await call("GET", "/v1/booking/admin/bookings", { token });
+      const target = admin.json.bookings.find((row) => row.name === "Tamu Pertama");
+      const res = await call("GET", `/v1/booking/admin/bookings/${target.id}/invoice.txt`, { token });
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get("content-type") ?? "", /text\/plain/);
+      assert.match(res.headers.get("content-disposition") ?? "", /attachment; filename="INV-/);
+      assert.match(res.text, /INV-\d{6}-[0-9A-Z]{4,6}/);
+    });
+
+    await step("Notifikasi selalu mengembalikan teks + whatsappUrl; delivered jujur", async () => {
+      const admin = await call("GET", "/v1/booking/admin/bookings", { token });
+      const target = admin.json.bookings.find((row) => row.name === "Tamu Pertama");
+
+      const bad = await call("POST", `/v1/booking/admin/bookings/${target.id}/notify`, {
+        token,
+        body: { kind: "spam" },
+      });
+      assert.equal(bad.status, 400, JSON.stringify(bad.json));
+
+      const res = await call("POST", `/v1/booking/admin/bookings/${target.id}/notify`, {
+        token,
+        body: { kind: "confirmation" },
+      });
+      assert.equal(res.status, 200, JSON.stringify(res.json));
+      assert.ok(res.json.subject, "subject terisi");
+      assert.ok(res.json.body.includes(target.name), "body menyebut nama tamu");
+      assert.ok(res.json.whatsappUrl?.startsWith("https://wa.me/"), "tautan WhatsApp dibentuk");
+      // Tanpa SMTP, pengiriman email tidak boleh diklaim berhasil.
+      assert.equal(res.json.delivered, false, "kanal belum hidup → delivered false, bukan klaim palsu");
+      assert.equal(res.json.channel, "manual", "tanpa SMTP, kanal dilaporkan manual");
+    });
+
+    await step("Pengingat: daftar kosong saat belum ada sesi H-1, dan tanpa kanal tetap jujur", async () => {
+      const res = await call("GET", "/v1/booking/admin/reminders", { token });
+      assert.equal(res.status, 200, JSON.stringify(res.json));
+      assert.equal(res.json.notifierLive, false, "kanal belum terpasang → notifierLive false");
+      // Sesi yang dibuat di sini masih jauh dari 24 jam, jadi belum ada yang jatuh tempo.
+      for (const row of res.json.reminders) {
+        const gap = new Date(row.start).getTime() - Date.now();
+        assert.ok(gap <= 24 * 60 * 60 * 1000, "hanya sesi < 24 jam yang masuk daftar pengingat");
+      }
+    });
+
+    await step("Pengingat tanpa sesi ditolak 401", async () => {
+      const res = await call("GET", "/v1/booking/admin/reminders");
+      assert.equal(res.status, 401, JSON.stringify(res.json));
+    });
+
     log("");
     log(`  ✅ Fase 11 e2e lulus — ${stepNo} langkah`);
   } catch (error) {

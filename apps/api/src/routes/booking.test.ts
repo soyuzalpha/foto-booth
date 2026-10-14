@@ -24,6 +24,7 @@ import { test } from "node:test";
 import { DEFAULT_BOOKING_SETTINGS, slotInstant } from "@foto-booth/shared";
 
 import { makeHarness, type TestHarness } from "../testing.ts";
+import { runBookingReminders } from "../jobs/reminders.ts";
 import { listEvents } from "../store.ts";
 
 const OPERATOR = "operator@example.com";
@@ -110,6 +111,7 @@ interface AdminBooking {
   depositStatus: string;
   start: string;
   eventId?: string | null;
+  remindedAt?: string | null;
 }
 
 /**
@@ -906,6 +908,377 @@ test("booking yang sudah batal tidak bisa digeser", async () => {
     });
     assert.equal(moved.statusCode, 409);
     assert.equal((moved.json() as { error: string }).error, "not_reschedulable");
+  } finally {
+    await h.close();
+  }
+});
+
+/* ---- Invoice, notifikasi & pengingat (Fase 11) -------------------- */
+
+/** Setujui booking lewat rute operator; mengembalikan balasannya. */
+async function approve(h: TestHarness, token: string, id: string) {
+  return h.app.inject({
+    method: "PATCH",
+    url: `/v1/booking/admin/bookings/${id}`,
+    headers: auth(token),
+    payload: { status: "approved" },
+  });
+}
+
+test("rute invoice, notifikasi, dan pengingat menolak tanpa token", async () => {
+  const h = await makeHarness();
+  try {
+    for (const [method, url] of [
+      ["GET", "/v1/booking/admin/bookings/apa-saja/invoice"],
+      ["GET", "/v1/booking/admin/bookings/apa-saja/invoice.txt"],
+      ["POST", "/v1/booking/admin/bookings/apa-saja/notify"],
+      ["GET", "/v1/booking/admin/reminders"],
+    ] as const) {
+      const response = await h.app.inject({ method, url, payload: {} });
+      assert.equal(response.statusCode, 401, `${method} ${url} seharusnya 401`);
+    }
+  } finally {
+    await h.close();
+  }
+});
+
+test("nomor invoice deterministik dan sama di sisi operator dan tamu", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const bookingToken = (created.json() as { token: string }).token;
+    const booking = await bookingFor(h, token, bookingToken);
+
+    const admin = await h.app.inject({
+      method: "GET",
+      url: `/v1/booking/admin/bookings/${booking.id}/invoice`,
+      headers: auth(token),
+    });
+    assert.equal(admin.statusCode, 200, admin.body);
+    const adminInvoice = (admin.json() as { invoice: { number: string; status: string; balanceDueIdr: number } })
+      .invoice;
+
+    // Kwitansi tamu harus memakai nomor yang sama — dua nomor untuk satu
+    // tagihan berarti tidak ada yang bisa direkonsiliasi.
+    const guest = await h.app.inject({ method: "GET", url: `/v1/booking/status/${bookingToken}/invoice` });
+    assert.equal(guest.statusCode, 200);
+    const guestInvoice = (guest.json() as { invoice: { number: string } }).invoice;
+    assert.equal(guestInvoice.number, adminInvoice.number);
+
+    // Deterministik: dipanggil dua kali tidak menerbitkan nomor kedua.
+    const again = await h.app.inject({
+      method: "GET",
+      url: `/v1/booking/admin/bookings/${booking.id}/invoice`,
+      headers: auth(token),
+    });
+    assert.equal((again.json() as { invoice: { number: string } }).invoice.number, adminInvoice.number);
+    assert.match(adminInvoice.number, /^INV-\d{6}-[A-Z0-9]{4,6}$/);
+
+    // Belum ada deposit masuk → belum dibayar, sisa sebesar harga.
+    assert.equal(adminInvoice.status, "unpaid");
+    assert.equal(adminInvoice.balanceDueIdr, 500_000);
+  } finally {
+    await h.close();
+  }
+});
+
+test("invoice berubah jadi lunas hanya setelah deposit menutup harga", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const booking = await bookingFor(h, token, (created.json() as { token: string }).token);
+    await approve(h, token, booking.id);
+
+    // Deposit 100rb dari harga 500rb: masuk, tapi belum lunas.
+    await h.app.inject({
+      method: "POST",
+      url: `/v1/booking/admin/bookings/${booking.id}/deposit`,
+      headers: auth(token),
+      payload: { status: "paid" },
+    });
+    const partial = await h.app.inject({
+      method: "GET",
+      url: `/v1/booking/admin/bookings/${booking.id}/invoice`,
+      headers: auth(token),
+    });
+    const partialInvoice = (
+      partial.json() as { invoice: { status: string; paidIdr: number; balanceDueIdr: number } }
+    ).invoice;
+    assert.equal(partialInvoice.status, "partial");
+    assert.equal(partialInvoice.paidIdr, 100_000);
+    assert.equal(partialInvoice.balanceDueIdr, 400_000);
+
+    // Deposit yang dikembalikan bukan "belum bayar" — statusnya sendiri.
+    await h.app.inject({
+      method: "POST",
+      url: `/v1/booking/admin/bookings/${booking.id}/deposit`,
+      headers: auth(token),
+      payload: { status: "refunded" },
+    });
+    const refunded = await h.app.inject({
+      method: "GET",
+      url: `/v1/booking/admin/bookings/${booking.id}/invoice`,
+      headers: auth(token),
+    });
+    assert.equal((refunded.json() as { invoice: { status: string } }).invoice.status, "refunded");
+  } finally {
+    await h.close();
+  }
+});
+
+test("kwitansi .txt terunduh sebagai teks polos", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const booking = await bookingFor(h, token, (created.json() as { token: string }).token);
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: `/v1/booking/admin/bookings/${booking.id}/invoice.txt`,
+      headers: auth(token),
+    });
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers["content-type"] as string, /text\/plain/);
+    assert.match(response.headers["content-disposition"] as string, /attachment/);
+    assert.match(response.body, /^Invoice INV-\d{6}-/);
+    assert.match(response.body, /Budi Santoso/);
+  } finally {
+    await h.close();
+  }
+});
+
+test("invoice booking yang tidak ada dijawab 404, bukan 500", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/v1/booking/admin/bookings/tidak-ada/invoice",
+      headers: auth(token),
+    });
+    assert.equal(response.statusCode, 404);
+  } finally {
+    await h.close();
+  }
+});
+
+test("notifikasi menyiapkan teks & tautan WA walau email belum hidup", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const booking = await bookingFor(h, token, (created.json() as { token: string }).token);
+
+    const bad = await h.app.inject({
+      method: "POST",
+      url: `/v1/booking/admin/bookings/${booking.id}/notify`,
+      headers: auth(token),
+      payload: { kind: "spam" },
+    });
+    assert.equal(bad.statusCode, 400);
+
+    const prepared = await h.app.inject({
+      method: "POST",
+      url: `/v1/booking/admin/bookings/${booking.id}/notify`,
+      headers: auth(token),
+      payload: { kind: "confirmation" },
+    });
+    assert.equal(prepared.statusCode, 200, prepared.body);
+    const body = prepared.json() as {
+      delivered: boolean;
+      channel: string;
+      subject: string;
+      body: string;
+      whatsappUrl: string;
+    };
+
+    // Jujur soal kanal: SMTP belum ada, jadi operator dapat teksnya.
+    assert.equal(body.delivered, false);
+    assert.equal(body.channel, "manual");
+    assert.match(body.body, /Budi Santoso/);
+    assert.equal(h.notifier.sent.length, 0, "notifier yang belum hidup tidak boleh menerima apa pun");
+
+    // Nomor WA dinormalkan ke 62… — `+62812…` di payload.
+    assert.match(body.whatsappUrl, /^https:\/\/wa\.me\/628123456789\?text=/);
+  } finally {
+    await h.close();
+  }
+});
+
+test("notifier hidup: approve mengirim konfirmasi ke tamu", async () => {
+  const h = await makeHarness();
+  try {
+    h.notifier.live = true;
+
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const booking = await bookingFor(h, token, (created.json() as { token: string }).token);
+
+    const approved = await approve(h, token, booking.id);
+    assert.equal(approved.statusCode, 200, approved.body);
+
+    const sent = h.notifier.lastTo("budi@example.com");
+    assert.ok(sent, "konfirmasi harus terkirim ke email tamu");
+    assert.match(sent.subject, /dikonfirmasi/i);
+    assert.match(sent.body, /Sesi Reguler/);
+    // Tautan status ikut, supaya tamu bisa menggeser jadwal sendiri.
+    assert.match(sent.body, /\/booking\/s\//);
+  } finally {
+    await h.close();
+  }
+});
+
+test("pengingat manual menandai booking supaya sapuan otomatis tidak mengulang", async () => {
+  const h = await makeHarness();
+  try {
+    h.notifier.live = true;
+
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const bookingToken = (created.json() as { token: string }).token;
+    const booking = await bookingFor(h, token, bookingToken);
+    await approve(h, token, booking.id);
+
+    const sent = await h.app.inject({
+      method: "POST",
+      url: `/v1/booking/admin/bookings/${booking.id}/notify`,
+      headers: auth(token),
+      payload: { kind: "reminder" },
+    });
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.equal((sent.json() as { delivered: boolean }).delivered, true);
+
+    // Sesinya besok: tanpa penandaan, sapuan berikutnya akan mengirim lagi.
+    h.setNow(new Date("2026-10-12T12:00:00.000Z"));
+    const report = await runBookingReminders(h.ctx);
+    assert.equal(report.due, 0, "pengingat manual harus menutup jendela otomatis");
+    assert.equal((await bookingFor(h, token, bookingToken)).remindedAt !== null, true);
+  } finally {
+    await h.close();
+  }
+});
+
+test("sapuan pengingat tidak menandai apa pun saat kanal kirim belum ada", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const bookingToken = (created.json() as { token: string }).token;
+    const booking = await bookingFor(h, token, bookingToken);
+    await approve(h, token, booking.id);
+
+    // 12:00 UTC = 19:00 WIB; sesi 09:00 WIB besok masuk jendela 24 jam.
+    h.setNow(new Date("2026-10-12T12:00:00.000Z"));
+    const report = await runBookingReminders(h.ctx);
+
+    assert.equal(report.due, 1);
+    assert.equal(report.sent, 0);
+    assert.equal(report.marked, 0, "tidak boleh menandai kalau pesannya tidak keluar");
+    assert.equal(report.pending.length, 1);
+    assert.equal(report.pending[0]?.bookingId, booking.id);
+    assert.equal((await bookingFor(h, token, bookingToken)).remindedAt, null);
+  } finally {
+    await h.close();
+  }
+});
+
+test("sapuan pengingat mengirim sekali lalu berhenti mengulang", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const bookingToken = (created.json() as { token: string }).token;
+    const booking = await bookingFor(h, token, bookingToken);
+    await approve(h, token, booking.id);
+
+    h.notifier.live = true;
+    h.setNow(new Date("2026-10-12T12:00:00.000Z"));
+
+    const first = await runBookingReminders(h.ctx);
+    assert.equal(first.due, 1);
+    assert.equal(first.sent, 1);
+    assert.equal(first.marked, 1);
+    const sent = h.notifier.lastTo("budi@example.com");
+    assert.ok(sent);
+    assert.match(sent.body, /[Pp]engingat/);
+
+    const second = await runBookingReminders(h.ctx);
+    assert.equal(second.due, 0, "booking yang sudah diingatkan tidak boleh muncul lagi");
+    assert.equal(second.sent, 0);
+    assert.ok((await bookingFor(h, token, bookingToken)).remindedAt !== null);
+  } finally {
+    await h.close();
+  }
+});
+
+test("pengingat tidak menyentuh booking yang belum disetujui", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    // Masih `requested`: tamu belum tentu jadi datang, jadi jangan diingatkan.
+    await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+
+    h.notifier.live = true;
+    h.setNow(new Date("2026-10-12T12:00:00.000Z"));
+
+    const report = await runBookingReminders(h.ctx);
+    assert.equal(report.due, 0);
+    assert.equal(h.notifier.sent.length, 0);
+  } finally {
+    await h.close();
+  }
+});
+
+test("daftar pengingat operator memuat teks siap kirim dan menandai kanal", async () => {
+  const h = await makeHarness();
+  try {
+    const token = await login(h);
+    const pkg = await seedPackage(h, token);
+
+    const created = await requestBooking(h, bookingPayload(pkg.id, at(TOMORROW, "09:00")), "10.0.0.1");
+    const booking = await bookingFor(h, token, (created.json() as { token: string }).token);
+    await approve(h, token, booking.id);
+
+    h.setNow(new Date("2026-10-12T12:00:00.000Z"));
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/v1/booking/admin/reminders",
+      headers: auth(token),
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json() as {
+      notifierLive: boolean;
+      reminders: { bookingId: string; body: string; whatsappUrl: string }[];
+    };
+
+    // Operator harus bisa tahu apakah ini benar-benar terkirim atau manual.
+    assert.equal(body.notifierLive, false);
+    assert.equal(body.reminders.length, 1);
+    assert.equal(body.reminders[0]?.bookingId, booking.id);
+    assert.match(body.reminders[0]?.body as string, /Sesi Reguler/);
+    assert.match(body.reminders[0]?.whatsappUrl as string, /^https:\/\/wa\.me\/628123456789/);
   } finally {
     await h.close();
   }

@@ -20,15 +20,20 @@
 
 import {
   API_PREFIX,
+  BOOKING_STATUSES,
   BookingPackageSchema,
   BookingSchema,
   BookingSettingsSchema,
   DEFAULT_BOOKING_SETTINGS,
+  DEPOSIT_STATUSES,
+  INVOICE_STATUSES,
   type Booking,
   type BookingPackage,
   type BookingSettings,
   type CreateBookingPackage,
   type DepositStatus,
+  type Invoice,
+  type InvoiceStatus,
   type RescheduleBooking,
   type UpdateBookingPackage,
   type UpdateBookingSettings,
@@ -75,6 +80,50 @@ export interface BookingClient {
   setDeposit(id: string, status: DepositStatus): Promise<Booking>;
   reschedule(id: string, body: RescheduleBooking): Promise<Booking>;
   report(range?: { from?: string; to?: string }): Promise<BookingReport>;
+  /** Invoice + kwitansi teks untuk satu booking (Fase 11). */
+  invoice(id: string): Promise<ClientInvoice>;
+  /** Kwitansi teks polos, apa adanya dari server. */
+  invoiceText(id: string): Promise<string>;
+  /** Siapkan (dan kirim kalau kanalnya hidup) pesan ke tamu. */
+  notify(id: string, kind: BookingMessageKind): Promise<BookingNotification>;
+  /** Booking yang menunggu pengingat, lengkap dengan teks siap kirim. */
+  reminders(): Promise<BookingReminders>;
+}
+
+/** Dua pesan yang dikenal server. `kind` lain ditolak 400. */
+export type BookingMessageKind = "confirmation" | "reminder";
+
+export interface ClientInvoice {
+  invoice: Invoice;
+  /** Kwitansi siap tempel — sudah diformat server, jangan dihitung ulang di sini. */
+  text: string;
+}
+
+export interface BookingNotification {
+  kind: BookingMessageKind;
+  /** `true` hanya kalau pesan benar-benar keluar dari server. */
+  delivered: boolean;
+  channel: "email" | "manual";
+  subject: string;
+  body: string;
+  whatsappUrl: string;
+}
+
+export interface PendingReminder {
+  bookingId: string;
+  name: string;
+  email: string;
+  phone: string;
+  start: string;
+  subject: string;
+  body: string;
+  whatsappUrl: string;
+}
+
+export interface BookingReminders {
+  /** `false` berarti pengingat harus dikirim manual (SMTP belum ada). */
+  notifierLive: boolean;
+  reminders: PendingReminder[];
 }
 
 export class BookingHttpError extends Error {
@@ -147,6 +196,83 @@ export function parsePackageReport(raw: unknown): PackageReport | null {
 export function parseBookingSettings(raw: unknown): BookingSettings {
   const parsed = BookingSettingsSchema.safeParse(raw);
   return parsed.success ? parsed.data : DEFAULT_BOOKING_SETTINGS;
+}
+
+/**
+ * Invoice dari API.
+ *
+ * `null` kalau nomor atau statusnya tidak dikenali — panel yang menampilkan
+ * "INV-undefined" lebih buruk daripada panel yang jujur bilang gagal memuat.
+ * Dua field enum divalidasi terhadap daftar shared supaya label yang tampil
+ * tidak pernah berasal dari nilai karangan.
+ */
+export function parseInvoice(raw: unknown): Invoice | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const source = raw as Record<string, unknown>;
+
+  const number = readString(source.number);
+  if (number === "") return null;
+
+  const status = readString(source.status);
+  if (!(INVOICE_STATUSES as readonly string[]).includes(status)) return null;
+
+  const depositStatus = readString(source.depositStatus);
+  const bookingStatus = readString(source.bookingStatus);
+  if (!(DEPOSIT_STATUSES as readonly string[]).includes(depositStatus)) return null;
+  if (!(BOOKING_STATUSES as readonly string[]).includes(bookingStatus)) return null;
+
+  const customer = (source.customer ?? {}) as Record<string, unknown>;
+  const lines: { label: string; amountIdr: number }[] = [];
+  if (Array.isArray(source.lines)) {
+    for (const line of source.lines) {
+      if (typeof line !== "object" || line === null) continue;
+      const entry = line as Record<string, unknown>;
+      lines.push({ label: readString(entry.label), amountIdr: readNumber(entry.amountIdr) });
+    }
+  }
+
+  return {
+    number,
+    issuedAt: readString(source.issuedAt),
+    businessName: readString(source.businessName),
+    customer: {
+      name: readString(customer.name),
+      email: readString(customer.email),
+      phone: readString(customer.phone),
+    },
+    packageName: readString(source.packageName),
+    scheduledAt: readString(source.scheduledAt),
+    durationMinutes: readCount(source.durationMinutes),
+    lines,
+    totalIdr: readCount(source.totalIdr),
+    paidIdr: readCount(source.paidIdr),
+    balanceDueIdr: readCount(source.balanceDueIdr),
+    status: status as InvoiceStatus,
+    statusLabel: readString(source.statusLabel),
+    depositStatus: depositStatus as Invoice["depositStatus"],
+    depositStatusLabel: readString(source.depositStatusLabel),
+    bookingStatus: bookingStatus as Invoice["bookingStatus"],
+    bookingStatusLabel: readString(source.bookingStatusLabel),
+  };
+}
+
+/** Satu baris pengingat; `null` kalau `bookingId`-nya tidak ada. */
+export function parsePendingReminder(raw: unknown): PendingReminder | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const source = raw as Record<string, unknown>;
+  const bookingId = readString(source.bookingId);
+  if (bookingId === "") return null;
+
+  return {
+    bookingId,
+    name: readString(source.name),
+    email: readString(source.email),
+    phone: readString(source.phone),
+    start: readString(source.start),
+    subject: readString(source.subject),
+    body: readString(source.body),
+    whatsappUrl: readString(source.whatsappUrl),
+  };
 }
 
 export function createBookingClient(options: BookingClientOptions): BookingClient {
@@ -295,6 +421,53 @@ export function createBookingClient(options: BookingClientOptions): BookingClien
         },
         packages,
       };
+    },
+
+    async invoice(id) {
+      const res = await send(`/booking/admin/bookings/${encodeURIComponent(id)}/invoice`);
+      const body = (await res.json()) as { invoice?: unknown; text?: unknown };
+      const invoice = parseInvoice(body.invoice);
+      if (invoice === null) throw new BookingHttpError(res.status, "invoice tidak dikenali");
+      return { invoice, text: readString(body.text) };
+    },
+
+    async invoiceText(id) {
+      const res = await send(`/booking/admin/bookings/${encodeURIComponent(id)}/invoice.txt`);
+      // Sengaja `text()`, bukan `json()`: rute ini membalas teks polos.
+      return res.text();
+    },
+
+    async notify(id, kind) {
+      const res = await send(`/booking/admin/bookings/${encodeURIComponent(id)}/notify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      const echoed = readString(body.kind);
+      return {
+        // Server adalah sumber kebenaran soal `kind`; kalau balasannya aneh,
+        // pakai yang kita minta supaya panel tidak menampilkan label kosong.
+        kind: echoed === "confirmation" || echoed === "reminder" ? echoed : kind,
+        delivered: body.delivered === true,
+        channel: readString(body.channel) === "email" ? "email" : "manual",
+        subject: readString(body.subject),
+        body: readString(body.body),
+        whatsappUrl: readString(body.whatsappUrl),
+      };
+    },
+
+    async reminders() {
+      const res = await send("/booking/admin/reminders");
+      const body = (await res.json()) as Record<string, unknown>;
+      const reminders: PendingReminder[] = [];
+      if (Array.isArray(body.reminders)) {
+        for (const raw of body.reminders) {
+          const parsed = parsePendingReminder(raw);
+          if (parsed !== null) reminders.push(parsed);
+        }
+      }
+      return { notifierLive: body.notifierLive === true, reminders };
     },
   };
 }

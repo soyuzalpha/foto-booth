@@ -31,23 +31,30 @@ import {
   BOOKING_RATE_LIMIT,
   BOOKING_RATE_WINDOW_MS,
   BOOKING_REASON_MAX,
+  BOOKING_STATUS_PATH,
   BOOKING_TOKEN_BYTES,
   BOOKING_TOKEN_RE,
   BookingRequestSchema,
   CancelBookingSchema,
   CreateBookingPackageSchema,
   DEFAULT_BOOKING_SETTINGS,
+  DEFAULT_BRANDING,
   RescheduleBookingSchema,
   UpdateBookingPackageSchema,
   UpdateBookingSettingsSchema,
   UpdateBookingStatusSchema,
+  buildBookingConfirmation,
+  buildBookingReminder,
   buildIcs,
+  buildInvoice,
   canTransition,
   findConflict,
   generateSlots,
+  invoiceText,
   localParts,
   occupancyReport,
   slotInstant,
+  whatsappLink,
   type Booking,
   type BookingAvailability,
   type BookingPackage,
@@ -67,12 +74,15 @@ import {
   getBookingByToken,
   getBookingPackage,
   getBookingSettings,
+  getBranding,
   insertBooking,
   insertBookingPackage,
   insertEvent,
   listBookingPackages,
   listBookings,
+  listBookingsDueForReminder,
   listBookingsInRange,
+  markBookingReminded,
   saveBookingSettings,
   updateBooking,
   updateEventDate,
@@ -395,6 +405,25 @@ export async function bookingRoutes(app: FastifyInstance, ctx: ServerContext): P
     return reply.send({ booking: publicBooking(booking), deposit: depositView(booking, provider.name, provider.live) });
   });
 
+  /**
+   * Invoice versi tamu, lewat token yang sama dengan halaman status.
+   *
+   * Nomornya sengaja dihitung dari `booking.id` yang sama dengan rute admin,
+   * jadi kwitansi yang dilihat tamu dan yang dipegang operator selalu bernomor
+   * identik — dua nomor berbeda untuk satu tagihan membuat rekonsiliasi
+   * mustahil.
+   */
+  app.get<{ Params: { token: string } }>("/v1/booking/status/:token/invoice", async (request, reply) => {
+    const { token } = request.params;
+    if (!BOOKING_TOKEN_RE.test(token)) return reply.status(404).send(NOT_FOUND("booking tidak ditemukan"));
+
+    const booking = getBookingByToken(ctx.db, token);
+    if (booking === null) return reply.status(404).send(NOT_FOUND("booking tidak ditemukan"));
+
+    const invoice = invoiceFor(booking);
+    return reply.send({ invoice, text: invoiceText(invoice) });
+  });
+
   /** Tamu membatalkan bookingnya sendiri. */
   app.post<{ Params: { token: string } }>("/v1/booking/status/:token/cancel", async (request, reply) => {
     const { token } = request.params;
@@ -659,8 +688,33 @@ export async function bookingRoutes(app: FastifyInstance, ctx: ServerContext): P
       updated = updateBooking(ctx.db, booking.id, { eventId: event.id }, ctx.now().toISOString());
     }
 
-    // Fase 9 (leads + notifikasi) yang akan mengirim email/WA di sini. Sampai
-    // itu ada, jejaknya masuk log supaya operator masih bisa menelusuri.
+    // Konfirmasi otomatis saat booking disetujui (Fase 11). Hanya dikirim kalau
+    // kanal email benar-benar hidup; kalau belum, jejaknya tetap masuk log dan
+    // operator bisa memakai `POST .../notify` untuk menyiapkan pesan manual.
+    if (target === "approved" && updated !== null && ctx.notifier.live) {
+      const settings = settingsOf(ctx);
+      const message = buildBookingConfirmation({
+        booking: {
+          name: updated.name,
+          packageName: updated.packageName,
+          start: updated.start,
+          priceIdr: updated.priceIdr,
+          depositIdr: updated.depositIdr,
+          status: updated.status,
+        },
+        timezoneOffsetMinutes: settings.timezoneOffsetMinutes,
+        statusUrl: `${request.protocol}://${request.host}${BOOKING_STATUS_PATH}${updated.token}`,
+        ...(businessNameOf() === undefined ? {} : { businessName: businessNameOf() as string }),
+      });
+      try {
+        await ctx.notifier.email(updated.email, message.subject, message.body);
+      } catch (error) {
+        // Kegagalan kirim tidak boleh membatalkan approval: slot sudah dikunci,
+        // dan operator masih bisa mengirim ulang lewat `.../notify`.
+        app.log.error({ err: error, bookingId: booking.id }, "gagal mengirim konfirmasi booking");
+      }
+    }
+
     app.log.info({ bookingId: booking.id, from: booking.status, to: target }, "status booking diubah");
 
     return reply.send(updated);
@@ -842,6 +896,195 @@ export async function bookingRoutes(app: FastifyInstance, ctx: ServerContext): P
       to,
       total: { ...totals, bookedHours },
       packages,
+    });
+  });
+
+  /* ================================================================ *
+   * Invoice & notifikasi (Fase 11 — sisa)
+   * ================================================================ */
+
+  /**
+   * Nama usaha untuk invoice/notifikasi.
+   *
+   * Diambil dari `branding.heading` — itu satu-satunya tempat operator menulis
+   * nama usahanya. Kalau masih kosong, jangan mengarang: `undefined` membuat
+   * shared memakai `"Foto Booth"`, bukan judul acara yang kebetulan terisi.
+   */
+  function businessNameOf(): string | undefined {
+    const heading = (getBranding(ctx.db) ?? DEFAULT_BRANDING).heading.trim();
+    return heading === "" ? undefined : heading;
+  }
+
+  /** Invoice dari satu booking. Dipakai rute admin dan rute publik ber-token. */
+  function invoiceFor(booking: Booking) {
+    const settings = settingsOf(ctx);
+    return buildInvoice({
+      booking: {
+        id: booking.id,
+        packageName: booking.packageName,
+        name: booking.name,
+        email: booking.email,
+        phone: booking.phone,
+        start: booking.start,
+        durationMinutes: booking.durationMinutes,
+        priceIdr: booking.priceIdr,
+        depositIdr: booking.depositIdr,
+        depositStatus: booking.depositStatus,
+        status: booking.status,
+      },
+      timezoneOffsetMinutes: settings.timezoneOffsetMinutes,
+      issuedAt: ctx.now().toISOString(),
+      ...(businessNameOf() === undefined ? {} : { businessName: businessNameOf() as string }),
+    });
+  }
+
+  app.get<{ Params: { id: string } }>("/v1/booking/admin/bookings/:id/invoice", async (request, reply) => {
+    const auth = guard(request);
+    if (!auth.ok) return reply.status(auth.status).send(UNAUTHORIZED(auth.status, auth.message));
+
+    const booking = getBooking(ctx.db, request.params.id);
+    if (booking === null) return reply.status(404).send(NOT_FOUND("booking tidak ditemukan"));
+
+    const invoice = invoiceFor(booking);
+    return reply.send({ invoice, text: invoiceText(invoice) });
+  });
+
+  /**
+   * Kwitansi teks polos, siap ditempel ke WhatsApp/email.
+   *
+   * Sengaja rute terpisah (`.txt`) alih-alih field di JSON: operator memakainya
+   * lewat `curl`/browser langsung, dan `content-disposition` membuatnya terunduh
+   * sebagai berkas, bukan tampil sebagai JSON yang harus disalin manual.
+   */
+  app.get<{ Params: { id: string } }>("/v1/booking/admin/bookings/:id/invoice.txt", async (request, reply) => {
+    const auth = guard(request);
+    if (!auth.ok) return reply.status(auth.status).send(UNAUTHORIZED(auth.status, auth.message));
+
+    const booking = getBooking(ctx.db, request.params.id);
+    if (booking === null) return reply.status(404).send(NOT_FOUND("booking tidak ditemukan"));
+
+    const invoice = invoiceFor(booking);
+    reply.type("text/plain; charset=utf-8");
+    reply.header("content-disposition", `attachment; filename="${invoice.number}.txt"`);
+    return reply.send(invoiceText(invoice));
+  });
+
+  /**
+   * Siapkan (dan kalau mungkin, kirim) pesan ke tamu.
+   *
+   * Selalu mengembalikan `body` + `whatsappUrl` walau pengiriman email belum
+   * hidup: operator butuh teksnya untuk dikirim manual. `delivered` jujur
+   * melaporkan apakah pesan benar-benar keluar dari server.
+   */
+  app.post<{ Params: { id: string } }>("/v1/booking/admin/bookings/:id/notify", async (request, reply) => {
+    const auth = guard(request);
+    if (!auth.ok) return reply.status(auth.status).send(UNAUTHORIZED(auth.status, auth.message));
+
+    const body = request.body as { kind?: string } | undefined;
+    const kinds = ["confirmation", "reminder"] as const;
+    if (body?.kind === undefined || !kinds.includes(body.kind as (typeof kinds)[number])) {
+      return reply.status(400).send(INVALID(`kind harus salah satu dari: ${kinds.join(", ")}`));
+    }
+
+    const booking = getBooking(ctx.db, request.params.id);
+    if (booking === null) return reply.status(404).send(NOT_FOUND("booking tidak ditemukan"));
+
+    const settings = settingsOf(ctx);
+    const statusUrl = `${request.protocol}://${request.host}${BOOKING_STATUS_PATH}${booking.token}`;
+    const messageInput = {
+      booking: {
+        name: booking.name,
+        packageName: booking.packageName,
+        start: booking.start,
+        priceIdr: booking.priceIdr,
+        depositIdr: booking.depositIdr,
+        status: booking.status,
+        ...(booking.reason === undefined ? {} : { reason: booking.reason }),
+      },
+      timezoneOffsetMinutes: settings.timezoneOffsetMinutes,
+      statusUrl,
+      ...(businessNameOf() === undefined ? {} : { businessName: businessNameOf() as string }),
+    };
+    const message =
+      body.kind === "confirmation" ? buildBookingConfirmation(messageInput) : buildBookingReminder(messageInput);
+
+    let delivered = false;
+    if (ctx.notifier.live) {
+      try {
+        await ctx.notifier.email(booking.email, message.subject, message.body);
+        delivered = true;
+      } catch (error) {
+        app.log.error({ err: error, bookingId: booking.id }, "gagal mengirim notifikasi booking");
+      }
+    }
+
+    // Pengingat manual tetap menandai `reminded_at`: kalau tidak, sapuan
+    // otomatis akan mengirim ulang pesan yang baru saja dikirim operator.
+    if (body.kind === "reminder" && delivered) {
+      markBookingReminded(ctx.db, booking.id, ctx.now().toISOString());
+    }
+
+    app.log.info(
+      { bookingId: booking.id, kind: body.kind, delivered, by: auth.operator.email },
+      "notifikasi booking disiapkan",
+    );
+
+    return reply.send({
+      kind: body.kind,
+      delivered,
+      channel: ctx.notifier.live ? "email" : "manual",
+      subject: message.subject,
+      body: message.body,
+      whatsappUrl: whatsappLink(booking.phone, message.body),
+    });
+  });
+
+  /**
+   * Booking yang menunggu pengingat.
+   *
+   * `pending` = belum diingatkan dan sesinya kurang dari 24 jam. Daftar ini
+   * yang membuat pengingat tetap mungkin dikerjakan walau SMTP belum ada:
+   * operator menyalin teksnya (atau `whatsappUrl`) dari sini.
+   */
+  app.get("/v1/booking/admin/reminders", async (request, reply) => {
+    const auth = guard(request);
+    if (!auth.ok) return reply.status(auth.status).send(UNAUTHORIZED(auth.status, auth.message));
+
+    const settings = settingsOf(ctx);
+    const now = ctx.now();
+    const due = listBookingsDueForReminder(
+      ctx.db,
+      now.toISOString(),
+      new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    );
+
+    return reply.send({
+      notifierLive: ctx.notifier.live,
+      reminders: due.map((booking) => {
+        const message = buildBookingReminder({
+          booking: {
+            name: booking.name,
+            packageName: booking.packageName,
+            start: booking.start,
+            priceIdr: booking.priceIdr,
+            depositIdr: booking.depositIdr,
+            status: booking.status,
+          },
+          timezoneOffsetMinutes: settings.timezoneOffsetMinutes,
+          statusUrl: `${request.protocol}://${request.host}${BOOKING_STATUS_PATH}${booking.token}`,
+          ...(businessNameOf() === undefined ? {} : { businessName: businessNameOf() as string }),
+        });
+        return {
+          bookingId: booking.id,
+          name: booking.name,
+          email: booking.email,
+          phone: booking.phone,
+          start: booking.start,
+          subject: message.subject,
+          body: message.body,
+          whatsappUrl: whatsappLink(booking.phone, message.body),
+        };
+      }),
     });
   });
 }

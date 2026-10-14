@@ -524,6 +524,13 @@ export const BookingSchema = z.object({
   reason: z.string().optional(),
   /** Event studio yang dibuat saat booking disetujui; null selama belum. */
   eventId: z.string().nullable().optional(),
+  /**
+   * Kapan pengingat H-1 dikirim; `null`/absen = belum.
+   *
+   * Disimpan supaya sapuan pengingat idempoten: booking yang sudah diingatkan
+   * tidak dikirimi pesan kedua walau sapuannya jalan tiap jam.
+   */
+  remindedAt: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

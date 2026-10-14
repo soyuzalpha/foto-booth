@@ -445,6 +445,35 @@
       "providerNote": "Hanya mode manual yang tersedia. Opsi gateway otomatis muncul di fase pembayaran.",
       "requireDeposit": "Wajibkan deposit sebelum slot dikunci",
       "save": "Simpan setelan"
+    },
+    "invoice": {
+      "open": "Invoice",
+      "when": "Jadwal sesi",
+      "total": "Total tagihan",
+      "paid": "Sudah dibayar",
+      "balance": "Sisa tagihan",
+      "deposit": "Deposit",
+      "copy": "Salin kwitansi",
+      "download": "Unduh .txt",
+      "close": "Tutup",
+      "copied": "Kwitansi tersalin.",
+      "copyFailed": "Papan klip diblokir peramban — salin manual dari unduhan .txt.",
+      "failed": "Invoice tidak bisa dimuat."
+    },
+    "notify": {
+      "remind": "Pengingat H-1",
+      "confirm": "Konfirmasi",
+      "openWa": "Kirim via WhatsApp",
+      "copy": "Salin pesan",
+      "sent": "Pesan terkirim ke {{email}}.",
+      "manual": "Teks siap. Kanal email belum aktif — kirim manual lewat WhatsApp.",
+      "failed": "Pesan tidak bisa disiapkan."
+    },
+    "reminders": {
+      "title": "Pengingat H-1",
+      "auto": "Kanal email aktif — pengingat ini ikut terkirim otomatis.",
+      "manual": "Kanal email belum aktif. Teks di bawah siap dikirim manual lewat WhatsApp.",
+      "empty": "Tidak ada booking yang menunggu pengingat."
     }
   },
   "leads": {

@@ -16,7 +16,7 @@
  */
 
 import { buildApp } from "./app.ts";
-import { createContext, type ContextOptions, type Mailer, type ServerContext } from "./context.ts";
+import { createContext, type BookingNotifier, type ContextOptions, type Mailer, type ServerContext } from "./context.ts";
 import type { S3Config } from "./objectStore.ts";
 
 /** Waktu tetap: Senin, 12 Oktober 2026 00:00:00 UTC. */
@@ -49,9 +49,36 @@ export class CapturingMailer implements Mailer {
   }
 }
 
+/**
+ * Notifier yang menyimpan pesan terakhir, bukan mengirim apa pun.
+ *
+ * `live` sengaja bisa diatur per-tes: perilaku yang paling penting untuk diuji
+ * adalah **apa yang terjadi saat notifier belum hidup** — booking tidak boleh
+ * ditandai sudah diingatkan kalau pesannya tidak keluar.
+ */
+export class CapturingNotifier implements BookingNotifier {
+  readonly sent: { to: string; subject: string; body: string }[] = [];
+  live = false;
+
+  email(to: string, subject: string, body: string): Promise<void> {
+    this.sent.push({ to, subject, body });
+    return Promise.resolve();
+  }
+
+  /** Pesan terakhir untuk alamat ini; `null` kalau tidak ada. */
+  lastTo(to: string): { to: string; subject: string; body: string } | null {
+    for (let i = this.sent.length - 1; i >= 0; i -= 1) {
+      const entry = this.sent[i];
+      if (entry !== undefined && entry.to === to) return entry;
+    }
+    return null;
+  }
+}
+
 export interface TestHarness {
   ctx: ServerContext;
   mailer: CapturingMailer;
+  notifier: CapturingNotifier;
   app: Awaited<ReturnType<typeof buildApp>>;
   /** Waktu yang dipegang konteks; bisa dimajukan lewat `advance()`. */
   setNow(date: Date): void;
@@ -68,6 +95,7 @@ export async function makeHarness(overrides: ContextOptions = {}): Promise<TestH
   let current = overrides.now?.() ?? FIXED_NOW;
 
   const mailer = new CapturingMailer();
+  const notifier = new CapturingNotifier();
   const ctx = createContext(
     {},
     {
@@ -76,16 +104,18 @@ export async function makeHarness(overrides: ContextOptions = {}): Promise<TestH
       now: () => current,
       fetch: () => Promise.reject(new Error("tes ini tidak boleh menyentuh jaringan")),
       mailer,
+      notifier,
       exposeOtpCode: false,
       ...overrides,
     },
   );
 
-  const app = await buildApp(ctx, { logger: false, ttlJob: false });
+  const app = await buildApp(ctx, { logger: false, ttlJob: false, reminderJob: false });
 
   return {
     ctx,
     mailer,
+    notifier,
     app,
     setNow(date) {
       current = date;

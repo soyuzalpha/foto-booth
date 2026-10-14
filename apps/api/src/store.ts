@@ -580,6 +580,7 @@ function toBooking(raw: Record<string, unknown>): Booking {
   if (typeof raw.notes === "string" && raw.notes !== "") booking.notes = raw.notes;
   if (typeof raw.reason === "string" && raw.reason !== "") booking.reason = raw.reason;
   booking.eventId = typeof raw.event_id === "string" && raw.event_id !== "" ? raw.event_id : null;
+  booking.remindedAt = typeof raw.reminded_at === "string" && raw.reminded_at !== "" ? raw.reminded_at : null;
   return booking;
 }
 
@@ -704,6 +705,33 @@ export function listBookingsInRange(db: Db, from: string, to: string): Booking[]
     .map(toBooking);
 }
 
+/**
+ * Booking yang harus diingatkan dalam jendela `[from, to)`.
+ *
+ * Syaratnya tiga, dan ketiganya penting: **`approved`** (booking yang masih
+ * `requested` belum tentu jadi — mengingatkan orang untuk sesi yang belum
+ * dikonfirmasi lebih buruk daripada diam), **`reminded_at IS NULL`** (sekali
+ * saja), dan **`start` dalam jendela** (bukan semua booking mendatang).
+ *
+ * `status` disaring lewat daftar tetap, bukan parameter, supaya pemanggil tidak
+ * bisa tanpa sengaja mengingatkan booking `cancelled`.
+ */
+export function listBookingsDueForReminder(db: Db, from: string, to: string): Booking[] {
+  return db
+    .prepare(
+      `SELECT * FROM bookings
+       WHERE status = 'approved' AND reminded_at IS NULL AND start >= ? AND start < ?
+       ORDER BY start ASC`,
+    )
+    .all(from, to)
+    .map(toBooking);
+}
+
+/** Tandai pengingat sudah dikirim. Idempoten: menandai dua kali tidak apa-apa. */
+export function markBookingReminded(db: Db, id: string, now: string): Booking | null {
+  return updateBooking(db, id, { remindedAt: now }, now);
+}
+
 export interface BookingStatusPatch {
   status?: BookingStatus | undefined;
   reason?: string | null | undefined;
@@ -712,6 +740,7 @@ export interface BookingStatusPatch {
   end?: string | undefined;
   durationMinutes?: number | undefined;
   eventId?: string | null | undefined;
+  remindedAt?: string | null | undefined;
 }
 
 export function updateBooking(db: Db, id: string, patch: BookingStatusPatch, now: string): Booking | null {
@@ -721,7 +750,7 @@ export function updateBooking(db: Db, id: string, patch: BookingStatusPatch, now
   db.prepare(
     `UPDATE bookings SET
        status = ?, reason = ?, deposit_status = ?, start = ?, end = ?, duration_minutes = ?,
-       event_id = ?, updated_at = ?
+       event_id = ?, reminded_at = ?, updated_at = ?
      WHERE id = ?`,
   ).run(
     patch.status ?? current.status,
@@ -731,6 +760,7 @@ export function updateBooking(db: Db, id: string, patch: BookingStatusPatch, now
     patch.end ?? current.end,
     patch.durationMinutes ?? current.durationMinutes,
     patch.eventId === undefined ? (current.eventId ?? null) : patch.eventId,
+    patch.remindedAt === undefined ? (current.remindedAt ?? null) : patch.remindedAt,
     now,
     id,
   );
