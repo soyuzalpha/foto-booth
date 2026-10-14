@@ -11,3 +11,4 @@ export * from "./branding.ts";
 export * from "./sharing.ts";
 export * from "./guestbook.ts";
 export * from "./printQueue.ts";
+export * from "./license.ts";

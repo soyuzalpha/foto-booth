@@ -20,6 +20,7 @@ import { galleryOperatorRoutes } from "./routes/galleries.ts";
 import { guestbookRoutes } from "./routes/guestbook.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { leadRoutes } from "./routes/leads.ts";
+import { licenseRoutes } from "./routes/license.ts";
 import { modelRoutes } from "./routes/models.ts";
 import { shareRoutes } from "./routes/share.ts";
 import { scheduleTtlCleanup } from "./jobs/ttl.ts";
@@ -95,6 +96,12 @@ export async function buildApp(
   // sebelum manusia membuka apa pun, dan memakai hash galeri yang sama dengan
   // galeri/leads/guestbook — didaftarkan setelahnya supaya jelas sumber datanya.
   await shareRoutes(app, ctx);
+
+  // Lisensi & order (Fase 10). Mekanisme saja — gateway pembayaran belum
+  // tersambung, dan provider `qris` menjawab 501 alih-alih membuat order
+  // yang menggantung. Didaftarkan setelah rute tamu karena entitlement
+  // operator ikut menentukan boleh-tidaknya galeri baru dibuat.
+  await licenseRoutes(app, ctx);
 
   // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.
   await modelRoutes(app);

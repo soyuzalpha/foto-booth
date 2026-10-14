@@ -44,7 +44,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[x]` **selesai** — 138 tes mesin video; model RIFE belum diunggah |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[x]` **selesai** — BYOK via header `x-gemini-key`; upscale & AI template elements ditunda |
 | 9 | Leads + analytics + branding | M | `[x]` **selesai** — branding/sharing/auto-print/guestbook + consent UU PDP; tombol kiosk #51/#52 dipindah ke Fase 12 |
-| 10 | Lisensi + payment (QRIS) | M | `[ ]` |
+| 10 | Lisensi + order (mekanisme; QRIS ditunda) | M | `[~]` **mekanisme selesai** — katalog SKU, order, status, kode aktivasi, batas plan; gateway pembayaran sengaja belum |
 | 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
 | 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
@@ -815,10 +815,78 @@ node e2e/phase9-leads.e2e.mjs
 
 ---
 
+## Fase 10 — Lisensi + order (mekanisme; gateway pembayaran ditunda)
+
+**Status:** `[~]` **mekanisme selesai & tervalidasi lokal (2026-10-14)** — katalog SKU, order, siklus hidup status, kode aktivasi, penebusan, dan penegakan batas plan semuanya ada di shared + API + studio, dengan tes dan e2e. **Gateway pembayaran tidak disambungkan** — itu permintaan eksplisit pemilik produk ("bangun UI dan mekanismenya dulu"). Menunggu bukti CI + container sebelum `[x]`.
+
+**Gate masuk:** `[x]` terpenuhi — gate keluar Fase 9 sudah lolos (commit `d298379`, CI hijau, container `healthy`).
+
+**Tujuan:** lisensi jadi entitas yang bisa **dilacak dan ditegakkan** — order punya status yang tidak bisa dipindah sembarangan, kode aktivasi terbit hanya setelah lunas dan bisa ditebus jadi entitlement perangkat, dan entitlement itu **benar-benar menolak** pembuatan galeri melebihi plan. Tanpa ini, `max_active_galleries` cuma angka yang tersimpan rapi di DB dan tidak pernah menolak apa pun.
+
+**Kenapa sekarang:** Fase 11 (Booking) punya deposit yang butuh entitas order; Fase 12 (kiosk/marketplace) butuh tahu perangkat ini berlisensi atau tidak. Mekanismenya dibangun sekarang supaya bentuk datanya tidak berubah lagi saat gateway disambungkan — yang tersisa nanti hanya mengganti provider `qris` dari stub jadi sungguhan.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Shared — logika murni | `packages/shared/src/license.ts` (katalog SKU, siklus hidup order, `evaluateLicense`, kode aktivasi, `planLimits`/`planAllowsGallery`) · `schemas.ts` (blok Zod **Lisensi & order**) · `index.ts` |
+| API — rute | `apps/api/src/routes/license.ts` (8 rute: katalog, entitlement, order, status, kode, tebus) · `apps/api/src/app.ts` (registrasi setelah `shareRoutes`) |
+| API — data & aturan | `apps/api/src/db.ts` (migrasi id 7 `license-orders`) · `apps/api/src/store.ts` (order, kode aktivasi, `countActiveGalleries`, `entitlementAllowsNewGallery`) · `apps/api/src/secrets.ts` (`sha256Hex` + generator kode aktivasi) · `apps/api/src/routes/galleries.ts` (gate 402 `entitlement_required`) |
+| Studio | `apps/studio/src/components/LicensePanel.tsx` · `apps/studio/src/lib/license/{licenseClient,useLicense}.ts` · `App.tsx` (tab `license`) · `src/locales/{id,en}.json` (blok `license`) |
+| E2E | `e2e/phase10-license.e2e.mjs` (9 bagian, **59 pemeriksaan**) |
+| Tes | `packages/shared/src/license.test.ts` · `apps/api/src/routes/license.test.ts` (**18 tes**) · `apps/studio/src/lib/license/licenseClient.test.ts` (**15 tes**) |
+
+**Task**
+
+- [x] Katalog SKU bertipe `Record<LicenseSkuId, …>` dengan sengaja: menambah id di `LICENSE_SKU_IDS` tanpa menambah entri jadi **error kompilasi**, bukan halaman kosong di panel
+- [x] **Harga tidak pernah datang dari klien**: `CreateOrderSchema` tidak punya `amountIdr` — bukan sekadar tidak dipakai; tipe yang tidak bisa membawa harga lebih kuat dari komentar yang melarangnya
+- [x] `sku_name` dan `amount_idr` disimpan sebagai **snapshot** — menaikkan harga besok tidak mengubah invoice yang sudah dikirim
+- [x] Siklus hidup status lewat `canTransitionOrder` di shared, bukan `if` lokal: `refunded` **tidak bisa** hidup lagi, jadi webhook gateway yang datang terlambat/terulang tidak menghidupkan lisensi yang dananya sudah kembali
+- [x] Status sama dengan status sekarang → `409`, bukan "sukses" palsu
+- [x] Kode aktivasi terbit **saat lunas**, bukan saat order dibuat — kode yang sudah beredar sebelum uang masuk tidak bisa ditarik kembali; 3 percobaan anti-tabrakan karena `code` adalah PRIMARY KEY
+- [x] Bentuk tampilan kode (`ABCD-EFGH-JKLM`) dihitung **server** (`formatActivationCode`); alfabet membuang `I`, `O`, `0`, `1` karena kode ini dibacakan dari invoice/kertas
+- [x] Penebusan memakai `WHERE redeemed_at IS NULL` — klik ganda / dua tab tidak bisa menerbitkan lisensi yang sama dua kali; kode ditebus operator lain menjadi entitlement **operator itu**, bukan pembuat order
+- [x] Jawaban tebus dibedakan: salah bentuk **400**, tidak ada **404**, sudah dipakai/dicabut/kedaluwarsa **409** — jawaban berbeda untuk "bukan kode" vs "kode tidak ada" membuat percobaan kode jadi terukur
+- [x] Refund **mencabut** kode yang sudah terbit (`revokeActivationCode`) — pelanggan yang uangnya kembali tidak tetap bisa mengaktifkan perangkat
+- [x] Provider `qris` menjawab **501 `payment_unavailable`**, bukan membuat order yang menggantung di "menunggu pembayaran" yang tidak akan pernah bisa dibayar; `ORDER_PROVIDERS` (boleh tercatat) dipisah dari `LIVE_ORDER_PROVIDERS` (bisa jalan sekarang)
+- [x] Batas plan **ditegakkan**, bukan sekadar disimpan: `planAllowsGallery` + `countActiveGalleries` → `402 entitlement_required` dengan pesan yang menyebut batas & plan-nya
+- [x] Aturan "boleh dipakai atau tidak" **hanya ada di satu tempat**: `evaluateLicense` di shared; `entitlementAllowsNewGallery` di API hanya tipis di atasnya — kalau aturannya ditulis dua kali, cepat atau lambat studio mengizinkan sesuatu yang ditolak API
+- [x] Operator tanpa entitlement (mode lokal) **tidak** dikunci — mode jujur hari ini adalah "tanpa lisensi", bukan "terkunci"; yang dibatasi hanya operator yang punya lisensi tapi sudah lewat batasnya
+- [x] Generator kode acak diletakkan di `apps/api/src/secrets.ts`, **bukan** di shared: `packages/shared` dipakai studio di browser, jadi tidak boleh menyentuh `Buffer`/API Node-only
+- [x] Panel studio: katalog, catat order, pindah status, tebus kode — dipisah klien HTTP murni + controller tanpa React + hook tipis + komponen, seperti panel Fase 9
+- [x] Panel **tidak punya kolom harga sama sekali**, dan memakai `canTransitionOrder` yang sama dengan API → operator tidak ditawari tombol yang pasti dijawab 409
+- [x] Bentuk kode ditampilkan dari **server** (`referenceFormatted`/`formatted`), bukan dirakit ulang di klien — dua tempat yang memformat kode yang sama cepat atau lambat berbeda
+- [x] Balasan klien divalidasi **per-item**: satu order rusak di tengah daftar dibuang, sisanya tetap tampil
+- [x] Provider yang belum hidup **dinonaktifkan, bukan disembunyikan** — operator perlu tahu QRIS memang direncanakan dan memang belum bisa dipakai
+- [ ] Gateway pembayaran QRIS (Midtrans/Xendit) + webhook → aktivasi otomatis → **ditunda atas permintaan pemilik produk**; yang ada hari ini adalah mekanisme lengkapnya, dan `qris` menjawab 501 sampai gateway disambungkan
+
+**Kriteria terima (FEATURE-MATRIX):** §B baris **Fase = 10** — #85 (payment QRIS) **sebagian**: mekanisme order + status + aktivasi yang jadi syaratnya sudah ada dan teruji, gateway-nya sendiri sengaja belum. Baris #84 (lisensi/entitlement, Fase 5) diperluas dari "status bisa divalidasi" jadi katalog SKU + kode aktivasi + batas plan yang ditegakkan.
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm typecheck && pnpm build
+pnpm test
+node e2e/phase10-license.e2e.mjs
+```
+
+- [x] E2E pakai HTTP sungguhan (server proses terpisah + DB scratch): katalog publik → catat order → transisi status → kode terbit → tebus → entitlement → **galeri ke-4 ditolak 402** → refund mencabut kode — `e2e/phase10-license.e2e.mjs`, **59 pemeriksaan lulus**
+- [x] Harga dari katalog, bukan body — diuji dua arah: order biasa, dan order yang sengaja menitipkan `amountIdr` (e2e bagian 4; `license.test.ts` "harga diambil dari katalog, bukan dari body klien")
+- [x] `qris` → 501 dan pesannya menyebut belum tersambung (e2e bagian 4; `license.test.ts` "provider qris menjawab 501, bukan order menggantung")
+- [x] Transisi mundur & status berulang ditolak 409 (e2e bagian 5; `license.test.ts`)
+- [x] Refund mencabut kode, dan order `refunded` tidak bisa dihidupkan lagi (e2e bagian 8)
+- [x] Kode yang salah bentuk/ tak ada / sudah dipakai dibedakan 400/404/409 (e2e bagian 6)
+- [x] Lisensi benar-benar membatasi: galeri ke-4 → 402 dengan pesan "batas 3" (e2e bagian 7)
+- [x] Semua rute operator tertutup tanpa token → 401 (e2e bagian 3)
+
+**Gate keluar:** menunggu bukti CI + container; setelah itu ✅ — task Fase 10 `[x]` kecuali gateway pembayaran yang ditunda dengan alasan tertulis.
+
+---
+
 ## Fase 11 — Booking & reservasi
 
-**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13). **Belum bisa ditutup** (`[x]`) karena Fase 7–10 belum jalan, dan dua dependensi kerasnya masih stub: deposit QRIS (Fase 10) dan reminder email/WA (Fase 9). Payment gateway sengaja **belum dikonekkan** atas permintaan pemilik.
-**Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 10 gate keluar belum terpenuhi (lisensi + payment QRIS belum ada). Booking dibangun lebih dulu sebagai UI + mekanisme dengan provider pembayaran berupa interface + stub, supaya wiring nanti aditif.
+**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13). **Belum bisa ditutup** (`[x]`) karena dua dependensi kerasnya masih stub: deposit QRIS (Fase 10 — mekanisme order sudah ada, gateway-nya sengaja belum) dan reminder email/WA (Fase 9). Payment gateway sengaja **belum dikonekkan** atas permintaan pemilik.
+**Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 10 gate keluar belum terpenuhi (gateway QRIS belum tersambung). Booking dibangun lebih dulu sebagai UI + mekanisme dengan provider pembayaran berupa interface + stub, supaya wiring nanti aditif.
 **Tujuan:** klien bisa memesan jadwal sendiri, operator tidak lagi mencatat manual di WhatsApp.
 
 **Kenapa setelah Fase 10:** booking butuh **deposit QRIS** dan **email/reminder**. Payment (Fase 10) yang menyediakan itu — bikin booking lebih dulu = kerja dua kali. Karena itu bagian itu **tidak** dikerjakan sekarang; yang dibangun adalah jalur yang tidak bergantung padanya.
@@ -942,7 +1010,7 @@ Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task
 - **Fase 7** — Video + slow-mo (WebCodecs + RIFE) · audio · boomerang/slideshow
 - **Fase 8** — AI style/backdrop/upscale/enhance/remix (Gemini BYOK, diproxy lewat `/v1/ai/*`)
 - **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue
-- **Fase 10** — Lisensi + payment QRIS (Midtrans/Xendit) + webhook → aktivasi
+- **Fase 10** — Lisensi + order: katalog SKU, siklus hidup order, kode aktivasi, batas plan (**mekanisme selesai**; gateway QRIS + webhook ditunda atas permintaan pemilik)
 - **Fase 11** — **Booking & reservasi** (detail lengkap di bawah) · halaman booking publik · kalender ketersediaan · approve/tolak · deposit QRIS · reminder H-1 · reschedule & cancel · dashboard operator · laporan okupansi
 - **Fase 12** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
 - **Fase 13** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring

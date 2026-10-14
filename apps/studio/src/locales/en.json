@@ -179,7 +179,8 @@
     "branding": "Branding",
     "share": "Share",
     "guestbook": "Guestbook",
-    "print": "Print queue"
+    "print": "Print queue",
+    "license": "License"
   },
   "template": {
     "title": "Template editor",
@@ -582,6 +583,69 @@
       "printing": "Printing",
       "done": "Done",
       "failed": "Failed"
+    }
+  },
+  "license": {
+    "title": "License & orders",
+    "signedOut": "Sign in on the Gallery tab first to manage licenses and orders.",
+    "loading": "Loading…",
+    "refresh": "Reload",
+    "redeemed": "Code {{code}} is active on this device.",
+    "status": {
+      "title": "This device's license status",
+      "unknown": "Unknown",
+      "allowed": "Paid features may be used on this device."
+    },
+    "state": {
+      "none": "No license",
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "limits": {
+      "galleries": "Active galleries at once: {{count}}",
+      "galleriesUnlimited": "Active galleries: unlimited",
+      "whiteLabelYes": "White-label allowed (remove built-in branding)",
+      "whiteLabelNo": "Built-in branding cannot be removed",
+      "commercialYes": "May be used for paid work",
+      "commercialNo": "May not be used for paid work"
+    },
+    "activate": {
+      "label": "Activation code",
+      "placeholder": "ABCD-EFGH-JKLM",
+      "submit": "Activate",
+      "hint": "The code is issued once payment is recorded as settled. Hyphens and lowercase are fine — the server normalises."
+    },
+    "catalog": {
+      "title": "License catalog",
+      "hint": "Prices come from the server, not the form",
+      "choose": "Choose this plan"
+    },
+    "order": {
+      "title": "Record an order",
+      "hint": "Price follows the catalog",
+      "created": "Order {{id}} recorded: {{amount}}.",
+      "sku": "Plan",
+      "email": "Buyer email",
+      "provider": "Provider",
+      "note": "Note",
+      "priceHint": "The price comes from the plan catalog — it can't be typed here.",
+      "submit": "Record order"
+    },
+    "provider": {
+      "notLive": "not available yet"
+    },
+    "orders": {
+      "title": "Order list",
+      "empty": "No orders recorded yet.",
+      "sku": "Plan",
+      "email": "Email",
+      "amount": "Amount",
+      "status": "Status",
+      "code": "Activation code",
+      "actions": "Actions",
+      "noCode": "—",
+      "settled": "Settled"
     }
   }
 }

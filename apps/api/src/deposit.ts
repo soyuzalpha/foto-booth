@@ -17,6 +17,9 @@
  */
 
 import type { PaymentProvider } from "@foto-booth/shared";
+import { formatIdr } from "@foto-booth/shared";
+
+export { formatIdr };
 
 /** Status deposit yang bisa dihasilkan provider. */
 export type DepositOutcome = "pending" | "paid" | "refunded" | "failed";
@@ -144,24 +147,4 @@ const PROVIDERS: Record<PaymentProvider, DepositProvider> = {
 
 export function resolveDepositProvider(name: PaymentProvider): DepositProvider {
   return PROVIDERS[name];
-}
-
-/**
- * Format rupiah tanpa Intl.
- *
- * `Intl.NumberFormat("id-ID")` bergantung pada data locale yang tersedia di
- * build Node; di image minimal bisa jadi menghasilkan format berbeda. Karena
- * angka ini masuk ke instruksi pembayaran yang dibaca manusia, hasilnya harus
- * sama di mana pun.
- */
-export function formatIdr(amount: number): string {
-  const rounded = Math.round(amount);
-  const sign = rounded < 0 ? "-" : "";
-  const digits = String(Math.abs(rounded));
-  let out = "";
-  for (let i = 0; i < digits.length; i += 1) {
-    if (i > 0 && (digits.length - i) % 3 === 0) out += ".";
-    out += digits[i];
-  }
-  return `${sign}Rp${out}`;
 }

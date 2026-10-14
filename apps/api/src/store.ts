@@ -11,6 +11,7 @@
  */
 
 import type {
+  ActivationCode,
   Booking,
   BookingPackage,
   BookingSettings,
@@ -25,10 +26,14 @@ import type {
   GuestbookEntryKind,
   Lead,
   LeadField,
+  LicenseSkuId,
+  Order,
+  OrderProvider,
+  OrderStatus,
   Photo,
 } from "@foto-booth/shared";
 
-import { isGuestbookEntryKind, normalizeBranding } from "@foto-booth/shared";
+import { evaluateLicense, isGuestbookEntryKind, normalizeBranding } from "@foto-booth/shared";
 
 import type { Db } from "./db.ts";
 
@@ -184,6 +189,19 @@ export function listExpiredGalleries(db: Db, now: string, limit = 200): Gallery[
 /** Umur galeri tersisa dalam hari — buat ditampilkan ke operator. */
 export function countGalleries(db: Db): number {
   return num(db.prepare("SELECT COUNT(*) AS n FROM galleries").get()?.n);
+}
+
+/**
+ * Galeri yang **belum kedaluwarsa** — yang dihitung terhadap batas plan.
+ *
+ * Memakai `expires_at > now`, bukan `COUNT(*)`: galeri yang masa tayangnya
+ * sudah lewat tidak memakai slot apa pun, dan menghitungnya akan membuat
+ * operator yang sudah lama berhenti tetap terkunci di batas plan-nya.
+ */
+export function countActiveGalleries(db: Db, now: Date): number {
+  return num(
+    db.prepare("SELECT COUNT(*) AS n FROM galleries WHERE expires_at > ?").get(now.toISOString())?.n,
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -386,23 +404,31 @@ export function getEntitlement(db: Db, email: string): Entitlement | null {
 /**
  * Apakah lisensi ini boleh bikin galeri baru?
  *
- * Lisensi kedaluwarsa diperlakukan sebagai tidak aktif — bukan error, cuma
- * tidak boleh menambah galeri. Galeri yang sudah ada tetap bisa dibuka tamu;
- * mencabut akses tamu gara-gara lisensi operator habis bukan perilaku yang
- * diinginkan di tengah acara.
+ * Tipis di atas `evaluateLicense` (shared) dengan sengaja: aturan "boleh
+ * dipakai atau tidak" cuma boleh ada di satu tempat. Kalau di sini ditulis
+ * ulang, cepat atau lambat studio akan bilang "boleh" untuk lisensi yang
+ * ditolak API — dan yang kelihatan di layar operator adalah error tanpa sebab.
+ *
+ * Dua keputusan yang membentuk fungsi ini:
+ *
+ *   · **Tanpa lisensi ≠ terkunci.** Operator yang belum pernah menebus kode
+ *     (semua pemasangan yang ada hari ini) tetap bisa membuat galeri. Hari ini
+ *     belum ada cara membeli lisensi di dalam produk — gateway pembayaran
+ *     sengaja belum disambungkan — jadi memblokir mereka bukan penegakan
+ *     lisensi, cuma produk yang mati sendiri. Yang ditegakkan adalah lisensi
+ *     yang **ada tapi tidak berlaku**: kedaluwarsa atau dicabut.
+ *   · **Galeri lama tidak ikut dicabut.** Lisensi yang habis menghalangi
+ *     galeri **baru** saja. Mencabut akses tamu ke galeri yang sudah dibuka
+ *     gara-gara lisensi operator habis bukan perilaku yang diinginkan di
+ *     tengah acara.
  */
 export function entitlementAllowsNewGallery(
   entitlement: Entitlement | null,
   now: Date,
 ): { allowed: boolean; reason: string | null } {
   if (entitlement === null) return { allowed: true, reason: null };
-  if (entitlement.status !== "active") {
-    return { allowed: false, reason: `lisensi ${entitlement.status}` };
-  }
-  if (entitlement.expiresAt !== null && new Date(entitlement.expiresAt).getTime() <= now.getTime()) {
-    return { allowed: false, reason: "lisensi kedaluwarsa" };
-  }
-  return { allowed: true, reason: null };
+  const verdict = evaluateLicense(entitlement, now);
+  return { allowed: verdict.allowed, reason: verdict.reason };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1258,4 +1284,239 @@ export function eventCounts(db: Db): Map<string, EventCounts> {
     });
   }
   return result;
+}
+
+/* ------------------------------------------------------------------ *
+ * Lisensi & order (Fase 10)
+ *
+ * Aturan bisnisnya (transisi status yang sah, kapan lisensi boleh dipakai)
+ * **tidak** ada di sini — itu milik `packages/shared/src/license.ts` supaya
+ * studio dan API tidak pernah menjawab pertanyaan yang sama dengan dua cara.
+ * Lapisan ini cuma memindahkan baris.
+ * ------------------------------------------------------------------ */
+
+function toOrder(raw: Record<string, unknown>): Order {
+  return {
+    id: str(raw.id),
+    sku: str(raw.sku) as LicenseSkuId,
+    skuName: str(raw.sku_name),
+    email: str(raw.email),
+    amountIdr: num(raw.amount_idr),
+    status: str(raw.status) as OrderStatus,
+    provider: str(raw.provider) as OrderProvider,
+    reference: typeof raw.reference === "string" ? raw.reference : null,
+    note: typeof raw.note === "string" ? raw.note : null,
+    createdAt: str(raw.created_at),
+    updatedAt: str(raw.updated_at),
+    paidAt: typeof raw.paid_at === "string" ? raw.paid_at : null,
+  };
+}
+
+export interface OrderRow {
+  sku: LicenseSkuId;
+  /** Nama & harga **saat dibeli** — bukan rujukan ke katalog hidup. */
+  skuName: string;
+  email: string;
+  amountIdr: number;
+  status: OrderStatus;
+  provider: OrderProvider;
+  reference?: string | null | undefined;
+  note?: string | null | undefined;
+  paidAt?: string | null | undefined;
+}
+
+export function insertOrder(db: Db, id: string, row: OrderRow, now: string): Order {
+  db.prepare(
+    `INSERT INTO orders
+       (id, sku, sku_name, email, amount_idr, status, provider, reference, note, created_at, updated_at, paid_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.sku,
+    row.skuName,
+    row.email,
+    row.amountIdr,
+    row.status,
+    row.provider,
+    row.reference ?? null,
+    row.note ?? null,
+    now,
+    now,
+    row.paidAt ?? null,
+  );
+
+  return {
+    id,
+    sku: row.sku,
+    skuName: row.skuName,
+    email: row.email,
+    amountIdr: row.amountIdr,
+    status: row.status,
+    provider: row.provider,
+    reference: row.reference ?? null,
+    note: row.note ?? null,
+    createdAt: now,
+    updatedAt: now,
+    paidAt: row.paidAt ?? null,
+  };
+}
+
+export function getOrder(db: Db, id: string): Order | null {
+  const raw = db.prepare("SELECT * FROM orders WHERE id = ?").get(id);
+  return raw === undefined ? null : toOrder(raw);
+}
+
+export interface OrderFilter {
+  email?: string | undefined;
+  status?: OrderStatus | undefined;
+  limit?: number | undefined;
+}
+
+/** Terbaru dulu — panel operator hampir selalu melihat order paling akhir. */
+export function listOrders(db: Db, filter: OrderFilter = {}): Order[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (filter.email !== undefined) {
+    where.push("email = ?");
+    params.push(filter.email);
+  }
+  if (filter.status !== undefined) {
+    where.push("status = ?");
+    params.push(filter.status);
+  }
+
+  const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "";
+  const limit = filter.limit ?? 200;
+  const rows = db
+    .prepare(`SELECT * FROM orders${clause} ORDER BY created_at DESC, id DESC LIMIT ?`)
+    .all(...params, limit);
+  return rows.map(toOrder);
+}
+
+export interface OrderPatch {
+  status: OrderStatus;
+  reference?: string | null | undefined;
+  note?: string | null | undefined;
+  paidAt?: string | null | undefined;
+}
+
+/**
+ * Pindahkan status order.
+ *
+ * `reference`/`note`/`paidAt` hanya ditulis kalau ada di `patch` — memindahkan
+ * status tidak boleh menghapus kode aktivasi yang sudah diterbitkan.
+ */
+export function updateOrder(db: Db, id: string, patch: OrderPatch, now: string): Order | null {
+  const current = getOrder(db, id);
+  if (current === null) return null;
+
+  const reference = patch.reference === undefined ? current.reference : patch.reference;
+  const note = patch.note === undefined ? current.note : patch.note;
+  const paidAt = patch.paidAt === undefined ? current.paidAt : patch.paidAt;
+
+  db.prepare(
+    `UPDATE orders SET status = ?, reference = ?, note = ?, paid_at = ?, updated_at = ? WHERE id = ?`,
+  ).run(patch.status, reference, note, paidAt, now, id);
+
+  return { ...current, status: patch.status, reference, note, paidAt, updatedAt: now };
+}
+
+/* ---- Kode aktivasi ------------------------------------------------ */
+
+function toActivationCode(raw: Record<string, unknown>): ActivationCode {
+  return {
+    code: str(raw.code),
+    orderId: typeof raw.order_id === "string" ? raw.order_id : null,
+    plan: str(raw.plan) as EntitlementPlan,
+    maxActiveGalleries:
+      raw.max_active_galleries === null || raw.max_active_galleries === undefined
+        ? null
+        : num(raw.max_active_galleries),
+    issuedAt: str(raw.issued_at),
+    expiresAt: typeof raw.expires_at === "string" ? raw.expires_at : null,
+    redeemedAt: typeof raw.redeemed_at === "string" ? raw.redeemed_at : null,
+    redeemedBy: typeof raw.redeemed_by === "string" ? raw.redeemed_by : null,
+    revokedAt: typeof raw.revoked_at === "string" ? raw.revoked_at : null,
+  };
+}
+
+export interface ActivationCodeRow {
+  /** Sudah ternormalisasi (`normalizeActivationCode`) — pemanggil yang menjamin. */
+  code: string;
+  orderId?: string | null | undefined;
+  plan: EntitlementPlan;
+  maxActiveGalleries: number | null;
+  expiresAt?: string | null | undefined;
+}
+
+export function insertActivationCode(db: Db, row: ActivationCodeRow, issuedAt: string): ActivationCode {
+  db.prepare(
+    `INSERT INTO activation_codes
+       (code, order_id, plan, max_active_galleries, issued_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.code,
+    row.orderId ?? null,
+    row.plan,
+    row.maxActiveGalleries,
+    issuedAt,
+    row.expiresAt ?? null,
+  );
+
+  return {
+    code: row.code,
+    orderId: row.orderId ?? null,
+    plan: row.plan,
+    maxActiveGalleries: row.maxActiveGalleries,
+    issuedAt,
+    expiresAt: row.expiresAt ?? null,
+    redeemedAt: null,
+    redeemedBy: null,
+    revokedAt: null,
+  };
+}
+
+export function getActivationCode(db: Db, code: string): ActivationCode | null {
+  const raw = db.prepare("SELECT * FROM activation_codes WHERE code = ?").get(code);
+  return raw === undefined ? null : toActivationCode(raw);
+}
+
+export function listActivationCodes(db: Db, orderId?: string): ActivationCode[] {
+  const rows =
+    orderId === undefined
+      ? db.prepare("SELECT * FROM activation_codes ORDER BY issued_at DESC").all()
+      : db
+          .prepare("SELECT * FROM activation_codes WHERE order_id = ? ORDER BY issued_at DESC")
+          .all(orderId);
+  return rows.map(toActivationCode);
+}
+
+/**
+ * Tebus kode: tandai siapa & kapan.
+ *
+ * `WHERE redeemed_at IS NULL` di klausa UPDATE adalah pengaman yang disengaja:
+ * dua permintaan aktivasi yang datang hampir bersamaan (klik ganda, dua tab)
+ * sama-sama lolos pemeriksaan di route, dan tanpa syarat ini kode yang sama
+ * akan diterbitkan dua kali untuk dua perangkat berbeda. Yang kedua dapat
+ * `null`, dan route menjawab "kode sudah dipakai".
+ */
+export function redeemActivationCode(
+  db: Db,
+  code: string,
+  email: string,
+  now: string,
+): ActivationCode | null {
+  const changes = Number(
+    db
+      .prepare("UPDATE activation_codes SET redeemed_at = ?, redeemed_by = ? WHERE code = ? AND redeemed_at IS NULL")
+      .run(now, email, code).changes,
+  );
+  if (changes === 0) return null;
+  return getActivationCode(db, code);
+}
+
+/** Cabut kode yang belum/sudah ditebus — dipakai saat dana dikembalikan. */
+export function revokeActivationCode(db: Db, code: string, now: string): ActivationCode | null {
+  db.prepare("UPDATE activation_codes SET revoked_at = ? WHERE code = ? AND revoked_at IS NULL").run(now, code);
+  return getActivationCode(db, code);
 }

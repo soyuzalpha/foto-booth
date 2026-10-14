@@ -256,6 +256,56 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_guestbook_created ON guestbook_entries(created_at);
     `,
   },
+  {
+    id: 7,
+    name: "license-orders",
+    // Fase 10. Dua tabel, dan pembagiannya disengaja:
+    //
+    //   · `orders` — pembelian lisensi. `sku_name` dan `amount_idr` disimpan
+    //     **apa adanya saat dibeli**, bukan menunjuk katalog hidup: kalau harga
+    //     naik, invoice lama tidak boleh ikut berubah. `reference` berisi kode
+    //     aktivasi yang diterbitkan setelah lunas.
+    //   · `activation_codes` — kode yang bisa ditebus di perangkat. Tabel
+    //     terpisah karena satu order bisa menerbitkan beberapa kode (misal
+    //     operator komersial dengan dua booth), dan karena kode harus tetap
+    //     bisa diverifikasi walau barisnya di DB order sudah dihapus.
+    //
+    // `code` disimpan dalam bentuk ternormalisasi (`ABCDEFGHJKLM`, tanpa tanda
+    // hubung) supaya `UNIQUE` benar-benar mencegah dua kode yang sama secara
+    // visual ditulis dengan format berbeda.
+    sql: `
+      CREATE TABLE orders (
+        id          TEXT PRIMARY KEY,
+        sku         TEXT NOT NULL,
+        sku_name    TEXT NOT NULL,
+        email       TEXT NOT NULL,
+        amount_idr  INTEGER NOT NULL,
+        status      TEXT NOT NULL,
+        provider    TEXT NOT NULL,
+        reference   TEXT,
+        note        TEXT,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        paid_at     TEXT
+      );
+      CREATE INDEX idx_orders_email  ON orders(email);
+      CREATE INDEX idx_orders_status ON orders(status);
+      CREATE INDEX idx_orders_created ON orders(created_at);
+
+      CREATE TABLE activation_codes (
+        code       TEXT PRIMARY KEY,
+        order_id   TEXT REFERENCES orders(id) ON DELETE SET NULL,
+        plan       TEXT NOT NULL,
+        max_active_galleries INTEGER,
+        issued_at  TEXT NOT NULL,
+        expires_at TEXT,
+        redeemed_at TEXT,
+        redeemed_by TEXT,
+        revoked_at TEXT
+      );
+      CREATE INDEX idx_activation_codes_order ON activation_codes(order_id);
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

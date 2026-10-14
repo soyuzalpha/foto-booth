@@ -27,6 +27,8 @@ import {
   maxBytesForContentType,
   mimeForExt,
   photoKey,
+  planAllowsGallery,
+  planLimits,
   thumbKey,
   type CreateGallery,
   type Event,
@@ -39,6 +41,7 @@ import type { ServerContext } from "../context.ts";
 import { deletePrefix, presignPut, ObjectStoreError } from "../objectStore.ts";
 import { hashSecret, newGalleryHash, newId } from "../secrets.ts";
 import {
+  countActiveGalleries,
   countPhotos,
   deleteGallery,
   deletePhotos,
@@ -122,6 +125,24 @@ export async function galleryOperatorRoutes(app: FastifyInstance, ctx: ServerCon
         message: `tidak bisa membuat galeri baru: ${verdict.reason ?? "lisensi tidak aktif"}`,
         statusCode: 402,
       });
+    }
+
+    // Batas jumlah galeri aktif dari plan (Fase 10). Diperiksa terpisah dari
+    // `entitlementAllowsNewGallery` karena pertanyaannya beda: yang itu soal
+    // "lisensinya hidup atau tidak", yang ini soal "kuotanya masih ada atau
+    // tidak". Operator tanpa entitlement (mode lokal) tidak dibatasi — mode
+    // jujur hari ini adalah "tanpa lisensi", bukan "terkunci".
+    if (entitlement !== null) {
+      const limits = planLimits(entitlement.plan);
+      if (!planAllowsGallery(limits, countActiveGalleries(ctx.db, now))) {
+        return reply.status(402).send({
+          error: "entitlement_required",
+          message:
+            `batas ${limits.maxActiveGalleries} galeri aktif untuk plan "${entitlement.plan}" sudah tercapai. ` +
+            `Hapus galeri lama, atau tingkatkan lisensi.`,
+          statusCode: 402,
+        });
+      }
     }
 
     const ttlDays = body.ttlDays ?? GALLERY_TTL_DAYS;

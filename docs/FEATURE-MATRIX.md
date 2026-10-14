@@ -136,7 +136,7 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | 81 | Analytics | kirim laporan diagnosa via email | Post | 12 |
 | 82 | Analytics | remote monitoring realtime (WebSocket) | Post | 13 |
 | 83 | **Infra** | auth email OTP → JWT | **MVP** | 5 |
-| 84 | Infra | lisensi / entitlement | **MVP** | 5 |
+| 84 | Infra | lisensi / entitlement (katalog SKU, kode aktivasi, batas plan) | **MVP** | 5 & 10 |
 | 85 | Infra | payment QRIS (Midtrans/Xendit) | Post | 10 |
 | 86 | Infra | i18n id + en | **MVP** | 1 |
 | 87 | Infra | Sentry error tracking | Post | 6 |

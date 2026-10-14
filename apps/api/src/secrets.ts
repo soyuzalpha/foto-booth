@@ -18,6 +18,8 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 
+import { ACTIVATION_ALPHABET, ACTIVATION_CODE_LENGTH } from "@foto-booth/shared";
+
 const pbkdf2Async = promisify(nodePbkdf2) as (
   password: string | Buffer,
   salt: string | Buffer,
@@ -137,4 +139,21 @@ export function newOtpCode(random: RandomSource = nodeRandom): string {
 /** SHA-256 hex — untuk sidik jari deterministik (mis. fingerprint URL presigned). */
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Kode aktivasi lisensi (Fase 10) — 12 karakter dari `ACTIVATION_ALPHABET`.
+ *
+ * Alfabetnya 32 karakter dan 256 habis dibagi 32, jadi `byte % 32` **tidak**
+ * bias ke karakter awal. Alfabet berukuran bukan-pangkat-dua (mis. 36) akan
+ * membuat huruf pertama lebih sering muncul, dan itu memperpendek ruang
+ * pencarian kode secara diam-diam.
+ */
+export function newActivationCode(random: RandomSource = nodeRandom): string {
+  const bytes = random.bytes(ACTIVATION_CODE_LENGTH);
+  let out = "";
+  for (let i = 0; i < ACTIVATION_CODE_LENGTH; i += 1) {
+    out += ACTIVATION_ALPHABET[(bytes[i] ?? 0) % ACTIVATION_ALPHABET.length];
+  }
+  return out;
 }

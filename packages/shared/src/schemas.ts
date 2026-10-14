@@ -14,6 +14,12 @@ import {
   type Lead,
   type LeadField,
 } from "./leads.ts";
+import {
+  LICENSE_SKU_IDS,
+  ORDER_PROVIDERS,
+  ORDER_STATUSES,
+  type Order,
+} from "./license.ts";
 import { TEMPLATE_DPI_DEFAULT, TEMPLATE_MIN_EXPORT_DPI } from "./template.ts";
 
 /* ------------------------------------------------------------------ *
@@ -744,6 +750,54 @@ export const GuestbookDraftSchema = z.object({
   key: z.string().min(1),
 });
 export type GuestbookDraftInput = z.infer<typeof GuestbookDraftSchema>;
+
+/* ------------------------------------------------------------------ *
+ * Lisensi & order (Fase 10)
+ *
+ * Logika murninya (`evaluateLicense`, katalog, kode aktivasi) ada di
+ * `license.ts`. Di sini hanya bentuk kabel.
+ *
+ * `CreateOrderSchema` sengaja **tidak** menerima `amountIdr`: harga diambil
+ * dari katalog di server. Kalau klien boleh mengirim harga, siapa pun yang
+ * memegang token operator bisa membeli lisensi komersial seharga seribu rupiah
+ * — dan itu tidak akan terlihat salah di panel mana pun.
+ * ------------------------------------------------------------------ */
+
+export const OrderSchema: z.ZodType<Order> = z.object({
+  id: z.string(),
+  sku: z.enum(LICENSE_SKU_IDS),
+  skuName: z.string(),
+  email: z.string().email(),
+  amountIdr: z.number().int().nonnegative(),
+  status: z.enum(ORDER_STATUSES),
+  provider: z.enum(ORDER_PROVIDERS),
+  reference: z.string().nullable(),
+  note: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  paidAt: z.string().nullable(),
+});
+
+export const CreateOrderSchema = z.object({
+  sku: z.enum(LICENSE_SKU_IDS),
+  email: z.string().email().max(200),
+  provider: z.enum(ORDER_PROVIDERS),
+  note: z.string().max(500).optional(),
+});
+export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
+
+/** Body `POST /v1/license/orders/:id/status` — operator memindahkan status. */
+export const UpdateOrderStatusSchema = z.object({
+  status: z.enum(ORDER_STATUSES),
+  note: z.string().max(500).optional(),
+});
+export type UpdateOrderStatusInput = z.infer<typeof UpdateOrderStatusSchema>;
+
+/** Body `POST /v1/license/activate` — kode dari invoice, bukan id order. */
+export const RedeemActivationSchema = z.object({
+  code: z.string().min(1).max(64),
+});
+export type RedeemActivationInput = z.infer<typeof RedeemActivationSchema>;
 
 /* ------------------------------------------------------------------ *
  * Error

@@ -179,7 +179,8 @@
     "branding": "Branding",
     "share": "Bagikan",
     "guestbook": "Guestbook",
-    "print": "Antrean cetak"
+    "print": "Antrean cetak",
+    "license": "Lisensi"
   },
   "template": {
     "title": "Editor template",
@@ -582,6 +583,69 @@
       "printing": "Mencetak",
       "done": "Selesai",
       "failed": "Gagal"
+    }
+  },
+  "license": {
+    "title": "Lisensi & order",
+    "signedOut": "Masuk dulu di tab Galeri untuk mengelola lisensi dan order.",
+    "loading": "Memuat…",
+    "refresh": "Muat ulang",
+    "redeemed": "Kode {{code}} aktif di perangkat ini.",
+    "status": {
+      "title": "Status lisensi perangkat",
+      "unknown": "Belum diketahui",
+      "allowed": "Fitur berbayar boleh dipakai di perangkat ini."
+    },
+    "state": {
+      "none": "Tanpa lisensi",
+      "active": "Aktif",
+      "expired": "Kedaluwarsa",
+      "revoked": "Dicabut"
+    },
+    "limits": {
+      "galleries": "Galeri aktif sekaligus: {{count}}",
+      "galleriesUnlimited": "Galeri aktif: tanpa batas",
+      "whiteLabelYes": "Boleh white-label (hapus merek bawaan)",
+      "whiteLabelNo": "Merek bawaan tidak boleh dihapus",
+      "commercialYes": "Boleh dipakai untuk jasa berbayar",
+      "commercialNo": "Tidak boleh dipakai untuk jasa berbayar"
+    },
+    "activate": {
+      "label": "Kode aktivasi",
+      "placeholder": "ABCD-EFGH-JKLM",
+      "submit": "Aktifkan",
+      "hint": "Kode diberikan setelah pembayaran dicatat lunas. Tanda hubung dan huruf kecil tidak masalah — server yang menormalkan."
+    },
+    "catalog": {
+      "title": "Katalog lisensi",
+      "hint": "Harga dari server, bukan dari formulir",
+      "choose": "Pilih paket ini"
+    },
+    "order": {
+      "title": "Catat order",
+      "hint": "Harga mengikuti katalog",
+      "created": "Order {{id}} tercatat: {{amount}}.",
+      "sku": "Paket",
+      "email": "Email pembeli",
+      "provider": "Provider",
+      "note": "Catatan",
+      "priceHint": "Harga diambil dari katalog paket — tidak bisa diketik di sini.",
+      "submit": "Catat order"
+    },
+    "provider": {
+      "notLive": "belum tersedia"
+    },
+    "orders": {
+      "title": "Daftar order",
+      "empty": "Belum ada order tercatat.",
+      "sku": "Paket",
+      "email": "Email",
+      "amount": "Jumlah",
+      "status": "Status",
+      "code": "Kode aktivasi",
+      "actions": "Tindakan",
+      "noCode": "—",
+      "settled": "Selesai"
     }
   }
 }

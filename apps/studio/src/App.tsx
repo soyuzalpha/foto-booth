@@ -12,6 +12,7 @@ import GuestbookPanel from "./components/GuestbookPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
 import KioskPanel from "./components/KioskPanel.tsx";
 import LeadsPanel from "./components/LeadsPanel.tsx";
+import LicensePanel from "./components/LicensePanel.tsx";
 import PrintQueuePanel from "./components/PrintQueuePanel.tsx";
 import SharePanel from "./components/SharePanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
@@ -227,7 +228,17 @@ function StudioApp(): React.JSX.Element {
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
   const [tab, setTab] = useState<
-    "capture" | "template" | "gallery" | "booking" | "leads" | "kiosk" | "branding" | "share" | "guestbook" | "print"
+    | "capture"
+    | "template"
+    | "gallery"
+    | "booking"
+    | "leads"
+    | "kiosk"
+    | "branding"
+    | "share"
+    | "guestbook"
+    | "print"
+    | "license"
   >("capture");
   const kiosk = useKiosk();
 
@@ -355,6 +366,16 @@ function StudioApp(): React.JSX.Element {
           >
             {t("tabs.print")}
           </button>
+          <button
+            className={`tab${tab === "license" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "license"}
+            data-testid="tab-license"
+            onClick={() => setTab("license")}
+          >
+            {t("tabs.license")}
+          </button>
         </div>
 
         {tab === "capture" ? (
@@ -386,6 +407,8 @@ function StudioApp(): React.JSX.Element {
           <GuestbookPanel />
         ) : tab === "print" ? (
           <PrintQueuePanel />
+        ) : tab === "license" ? (
+          <LicensePanel />
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}
