@@ -44,7 +44,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[x]` **selesai** — 138 tes mesin video; model RIFE belum diunggah |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[x]` **selesai** — BYOK via header `x-gemini-key`; upscale & AI template elements ditunda |
 | 9 | Leads + analytics + branding | M | `[x]` **selesai** — branding/sharing/auto-print/guestbook + consent UU PDP; tombol kiosk #51/#52 dipindah ke Fase 12 |
-| 10 | Lisensi + order (mekanisme; QRIS ditunda) | M | `[~]` **mekanisme selesai** — katalog SKU, order, status, kode aktivasi, batas plan; gateway pembayaran sengaja belum |
+| 10 | Lisensi + order (mekanisme; QRIS ditunda) | M | `[x]` **selesai** — katalog SKU, order, status, kode aktivasi, batas plan; gateway pembayaran sengaja belum |
 | 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
 | 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
@@ -817,7 +817,7 @@ node e2e/phase9-leads.e2e.mjs
 
 ## Fase 10 — Lisensi + order (mekanisme; gateway pembayaran ditunda)
 
-**Status:** `[~]` **mekanisme selesai & tervalidasi lokal (2026-10-14)** — katalog SKU, order, siklus hidup status, kode aktivasi, penebusan, dan penegakan batas plan semuanya ada di shared + API + studio, dengan tes dan e2e. **Gateway pembayaran tidak disambungkan** — itu permintaan eksplisit pemilik produk ("bangun UI dan mekanismenya dulu"). Menunggu bukti CI + container sebelum `[x]`.
+**Status:** `[x]` **selesai (2026-10-14)** — katalog SKU, order, siklus hidup status, kode aktivasi, penebusan, dan penegakan batas plan semuanya ada di shared + API + studio, dengan tes dan e2e. **Gateway pembayaran tidak disambungkan** — itu permintaan eksplisit pemilik produk ("bangun UI dan mekanismenya dulu"); provider `qris` menjawab 501 sampai gateway dipasang. Gate keluar lolos: commit `5114379`, CI 17/17 step `Result: true`, container `foto-booth:5114379…` `healthy`, `/v1/license/catalog` 200 di live.
 
 **Gate masuk:** `[x]` terpenuhi — gate keluar Fase 9 sudah lolos (commit `d298379`, CI hijau, container `healthy`).
 
@@ -879,7 +879,7 @@ node e2e/phase10-license.e2e.mjs
 - [x] Lisensi benar-benar membatasi: galeri ke-4 → 402 dengan pesan "batas 3" (e2e bagian 7)
 - [x] Semua rute operator tertutup tanpa token → 401 (e2e bagian 3)
 
-**Gate keluar:** menunggu bukti CI + container; setelah itu ✅ — task Fase 10 `[x]` kecuali gateway pembayaran yang ditunda dengan alasan tertulis.
+**Gate keluar:** ✅ — CI 17/17 step `Result: true` (worker run 2026-10-14 16:02 UTC), container `foto-booth:5114379e2fac` `healthy`, verifikasi live: `/v1/license/catalog` 200 (2 SKU + provider `manual` live, `qris` belum), `/v1/license/{orders,entitlement,activate}` tanpa token → 401. Task Fase 10 `[x]` kecuali gateway pembayaran yang ditunda dengan alasan tertulis.
 
 ---
 
