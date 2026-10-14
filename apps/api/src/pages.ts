@@ -65,6 +65,19 @@ ${head}
           font-size:16px; cursor:pointer; font-family:inherit; }
   form { display:flex; gap:10px; flex-wrap:wrap; }
   input[type=password] { flex:1 1 200px; border:3px solid var(--ink); padding:12px; font-size:16px; font-family:inherit; }
+  /* Form data tamu (Fase 9) memakai label blok. 'flex:1 1 100%' supaya tetap
+     utuh satu baris di dalam form yang flex-nya row — tanpa ini label dan
+     input saling menghimpit. */
+  label { flex:1 1 100%; display:block; margin:0; font-weight:700; font-size:14px; }
+  label small { display:block; font-weight:400; color:#555; margin-top:4px; }
+  label.check { display:flex; gap:10px; align-items:flex-start; font-weight:400; font-size:14px; line-height:1.45; }
+  label.check input { flex:0 0 auto; margin-top:3px; }
+  input[type=text], input[type=email], input[type=tel], select {
+           width:100%; border:3px solid var(--ink); padding:12px; font-size:16px;
+           font-family:inherit; margin-top:6px; background:#fff; }
+  .trap { position:absolute; left:-9999px; width:1px; height:1px; }
+  section.leads { border-top:3px solid var(--ink); margin-top:28px; padding-top:12px; }
+  h2 { margin:0 0 8px; font-size:20px; }
   .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:24px; }
   .note { font-size:13px; color:#555; margin:16px 0 0; }
 </style>

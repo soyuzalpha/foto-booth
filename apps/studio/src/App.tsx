@@ -9,6 +9,7 @@ import DebugPanel from "./components/DebugPanel.tsx";
 import GalleryPanel from "./components/GalleryPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
 import KioskPanel from "./components/KioskPanel.tsx";
+import LeadsPanel from "./components/LeadsPanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
 import UploadStatusPanel from "./components/UploadStatusPanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
@@ -221,7 +222,7 @@ function StudioApp(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
-  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "booking" | "kiosk">("capture");
+  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "booking" | "leads" | "kiosk">("capture");
   const kiosk = useKiosk();
 
   return (
@@ -289,6 +290,16 @@ function StudioApp(): React.JSX.Element {
             {t("tabs.booking")}
           </button>
           <button
+            className={`tab${tab === "leads" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "leads"}
+            data-testid="tab-leads"
+            onClick={() => setTab("leads")}
+          >
+            {t("tabs.leads")}
+          </button>
+          <button
             className={`tab${tab === "kiosk" ? " is-active" : ""}`}
             type="button"
             role="tab"
@@ -319,6 +330,8 @@ function StudioApp(): React.JSX.Element {
           <GalleryPanel />
         ) : tab === "booking" ? (
           <BookingPanel />
+        ) : tab === "leads" ? (
+          <LeadsPanel />
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}

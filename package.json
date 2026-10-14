@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:e2e": "node e2e/phase5-upload.e2e.mjs",
-    "test:e2e:filters": "node e2e/phase6-filters.e2e.mjs"
+    "test:e2e:filters": "node e2e/phase6-filters.e2e.mjs",
+    "test:e2e:leads": "node e2e/phase9-leads.e2e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",

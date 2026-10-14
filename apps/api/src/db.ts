@@ -148,6 +148,65 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE bookings ADD COLUMN event_id TEXT REFERENCES events(id) ON DELETE SET NULL;
     `,
   },
+  {
+    id: 4,
+    name: "leads-analytics",
+    // Fase 9. Tiga tabel, masing-masing dengan alasan yang berbeda:
+    //
+    //   · `lead_fields` — definisi field yang ditanyakan ke tamu. `key` unik
+    //     per lingkup (`COALESCE(event_id,'')`), bukan per baris: dua field
+    //     bernama sama akan menulis ke kolom CSV yang sama dan menimpa satu
+    //     sama lain tanpa error.
+    //   · `leads` — satu baris per tamu. `values_json` sengaja JSON, bukan
+    //     kolom dinamis: field dibuat operator saat runtime, dan SQLite tidak
+    //     bisa menambah kolom per perubahan konfigurasi. `consent_text` +
+    //     `consent_version` disimpan apa adanya supaya bisa dibuktikan versi
+    //     mana yang disetujui tamu (syarat UU PDP).
+    //   · `gallery_views` — dihitung **per galeri per hari**, bukan per
+    //     kunjungan. Tabel ini tumbuh oleh trafik tamu; menyimpan satu baris
+    //     per muat halaman akan membuatnya jadi tabel terbesar di DB hanya
+    //     untuk sebuah angka di dasbor.
+    sql: `
+      CREATE TABLE lead_fields (
+        id          TEXT PRIMARY KEY,
+        event_id    TEXT REFERENCES events(id) ON DELETE CASCADE,
+        key         TEXT NOT NULL,
+        label       TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        required    INTEGER NOT NULL DEFAULT 0,
+        options     TEXT NOT NULL DEFAULT '[]',
+        help_text   TEXT,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        active      INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_lead_fields_scope_key ON lead_fields(COALESCE(event_id, ''), key);
+      CREATE INDEX idx_lead_fields_event ON lead_fields(event_id);
+
+      CREATE TABLE leads (
+        id              TEXT PRIMARY KEY,
+        event_id        TEXT REFERENCES events(id) ON DELETE CASCADE,
+        gallery_id      TEXT REFERENCES galleries(id) ON DELETE SET NULL,
+        values_json     TEXT NOT NULL,
+        consent         INTEGER NOT NULL,
+        consent_text    TEXT NOT NULL,
+        consent_version TEXT NOT NULL,
+        source          TEXT NOT NULL,
+        created_at      TEXT NOT NULL
+      );
+      CREATE INDEX idx_leads_event   ON leads(event_id);
+      CREATE INDEX idx_leads_gallery ON leads(gallery_id);
+      CREATE INDEX idx_leads_created ON leads(created_at);
+
+      CREATE TABLE gallery_views (
+        gallery_id TEXT NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+        day        TEXT NOT NULL,
+        views      INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (gallery_id, day)
+      );
+      CREATE INDEX idx_gallery_views_day ON gallery_views(day);
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

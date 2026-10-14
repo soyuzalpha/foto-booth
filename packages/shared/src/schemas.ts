@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { BOOKING_STATUSES, DEPOSIT_STATUSES } from "./booking.ts";
 import { CONTENT_KINDS } from "./constants.ts";
+import {
+  LEAD_FIELD_TYPES,
+  LEAD_VALUE_MAX,
+  type Lead,
+  type LeadField,
+} from "./leads.ts";
 import { TEMPLATE_DPI_DEFAULT, TEMPLATE_MIN_EXPORT_DPI } from "./template.ts";
 
 /* ------------------------------------------------------------------ *
@@ -178,22 +184,6 @@ export const ContentItemSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 export type ContentItem = z.infer<typeof ContentItemSchema>;
-
-/* ------------------------------------------------------------------ *
- * Leads (kiosk)
- * ------------------------------------------------------------------ */
-
-export const LeadSchema = z.object({
-  id: z.string(),
-  email: z.string().email(),
-  name: z.string().optional(),
-  consent: z.boolean(),
-  createdAt: z.string(),
-});
-export type Lead = z.infer<typeof LeadSchema>;
-
-export const CreateLeadSchema = LeadSchema.omit({ id: true, createdAt: true });
-export type CreateLead = z.infer<typeof CreateLeadSchema>;
 
 /* ------------------------------------------------------------------ *
  * Fase 5 — upload presigned, OTP, entitlement
@@ -547,6 +537,127 @@ export const CancelBookingSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 export type CancelBooking = z.infer<typeof CancelBookingSchema>;
+
+/* ------------------------------------------------------------------ *
+ * Leads & analytics (Fase 9)
+ *
+ * Logika murninya ada di `leads.ts` (validasi nilai, escape CSV, retensi).
+ * Yang di sini cuma **bentuk kabel**: apa yang boleh masuk lewat HTTP dan apa
+ * yang keluar. Skema `LeadField`/`Lead` dianotasi `z.ZodType<...>` alih-alih
+ * di-`infer` supaya tipe-nya tetap satu sumber di `leads.ts` — dua deklarasi
+ * dengan nama sama akan saling membatalkan saat `index.ts` memakai `export *`.
+ * ------------------------------------------------------------------ */
+
+export const LeadFieldTypeSchema = z.enum(LEAD_FIELD_TYPES);
+
+export const LeadFieldSchema: z.ZodType<LeadField> = z.object({
+  id: z.string(),
+  /** `null` = field global, berlaku untuk semua event. */
+  eventId: z.string().nullable(),
+  /** Kunci stabil untuk CSV; tidak pernah berubah setelah dibuat. */
+  key: z.string().min(1),
+  label: z.string().min(1).max(80),
+  type: LeadFieldTypeSchema,
+  required: z.boolean(),
+  options: z.array(z.string().min(1).max(80)).max(40),
+  helpText: z.string().max(200).nullable(),
+  sortOrder: z.number().int().min(0).max(1000),
+  active: z.boolean(),
+  createdAt: z.string(),
+});
+
+export const LeadValueSchema = z.union([z.string().max(LEAD_VALUE_MAX), z.boolean()]);
+
+export const LeadSchema: z.ZodType<Lead> = z.object({
+  id: z.string(),
+  eventId: z.string().nullable(),
+  galleryId: z.string().nullable(),
+  values: z.record(z.string(), LeadValueSchema),
+  consent: z.boolean(),
+  consentText: z.string(),
+  consentVersion: z.string(),
+  source: z.string(),
+  createdAt: z.string(),
+});
+
+/** Body `POST /v1/leads/admin/fields` — kunci diturunkan server dari label. */
+export const CreateLeadFieldSchema = z
+  .object({
+    eventId: z.string().min(1).nullable().optional(),
+    label: z.string().min(1).max(80),
+    type: LeadFieldTypeSchema,
+    required: z.boolean().default(false),
+    options: z.array(z.string().min(1).max(80)).max(40).default([]),
+    helpText: z.string().max(200).nullable().optional(),
+    sortOrder: z.number().int().min(0).max(1000).optional(),
+    active: z.boolean().default(true),
+  })
+  .refine((value) => value.type !== "select" || value.options.length > 0, {
+    message: "field bertipe select harus punya minimal satu pilihan",
+    path: ["options"],
+  });
+export type CreateLeadField = z.infer<typeof CreateLeadFieldSchema>;
+
+export const UpdateLeadFieldSchema = z
+  .object({
+    label: z.string().min(1).max(80).optional(),
+    required: z.boolean().optional(),
+    options: z.array(z.string().min(1).max(80)).max(40).optional(),
+    helpText: z.string().max(200).nullable().optional(),
+    sortOrder: z.number().int().min(0).max(1000).optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "tidak ada yang diubah" });
+export type UpdateLeadField = z.infer<typeof UpdateLeadFieldSchema>;
+
+/**
+ * Body `POST /v1/leads` — dari form tamu.
+ *
+ * `values` sengaja `record(unknown)`: nama kuncinya ditentukan field yang
+ * dikonfigurasi operator, jadi tidak bisa ditulis mati di skema. Validasi
+ * sebenarnya ada di `validateLeadValues` (`leads.ts`), yang tahu field mana
+ * yang wajib dan tipe apa isinya.
+ */
+export const LeadSubmissionSchema = z.object({
+  /** Bagian URL galeri tamu — sumber event & galeri diambil dari sini. */
+  galleryHash: z.string().min(1).max(64).optional(),
+  eventId: z.string().min(1).optional(),
+  values: z.record(z.string(), z.unknown()).default({}),
+  /** Persetujuan simpan data (UU PDP). Wajib `true`. */
+  consent: z.literal(true),
+  /** Honeypot, sama seperti form booking. */
+  website: z.string().max(200).optional(),
+});
+export type LeadSubmission = z.infer<typeof LeadSubmissionSchema>;
+
+/* ---- Analytics ---------------------------------------------------- */
+
+/** Ringkas satu event untuk dasbor. */
+export const EventAnalyticsSchema = z.object({
+  eventId: z.string(),
+  name: z.string(),
+  date: z.string(),
+  galleries: z.number().int().nonnegative(),
+  photos: z.number().int().nonnegative(),
+  /** Jumlah buka halaman galeri (dihitung sekali per galeri per hari). */
+  views: z.number().int().nonnegative(),
+  leads: z.number().int().nonnegative(),
+});
+export type EventAnalytics = z.infer<typeof EventAnalyticsSchema>;
+
+export const AnalyticsOverviewSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  totals: z.object({
+    events: z.number().int().nonnegative(),
+    galleries: z.number().int().nonnegative(),
+    photos: z.number().int().nonnegative(),
+    views: z.number().int().nonnegative(),
+    leads: z.number().int().nonnegative(),
+  }),
+  events: z.array(EventAnalyticsSchema),
+});
+export type AnalyticsOverview = z.infer<typeof AnalyticsOverviewSchema>;
 
 /* ------------------------------------------------------------------ *
  * Error

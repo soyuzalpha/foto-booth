@@ -43,7 +43,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 6 | Green screen + adjustments + face enhance | L | `[x]` **selesai** — 19/19 e2e; GFPGAN ~340 MB belum diunggah |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
-| 9 | Leads + analytics + branding | M | `[ ]` |
+| 9 | Leads + analytics + branding | M | `[~]` **inti Leads+Analytics selesai** — branding/sharing/auto-print ditunda |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
 | 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
@@ -582,6 +582,76 @@ operator saat siap (tidak ikut git).
 
 ---
 
+## Fase 9 — Leads + analytics + branding
+
+**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena Fase 7–8 belum jalan, dan bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
+**Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 8 belum jalan. Yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada video/AI: menangkap data tamu + menghitungnya.
+**Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu.
+
+**Kenapa sekarang:** Fase 11 (Booking) menaruh dua tugasnya sebagai "ditunda: butuh Fase 9" (konfirmasi email/WA + reminder H-1). Inti Leads/Analytics dibangun lebih dulu supaya jalur itu punya tempat berpijak. Sisa Fase 9 (branding, sharing, auto-print) menyusul bersama Fase 7/8.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Shared — logika murni | `packages/shared/src/leads.ts` (bentuk field, validasi, CSV) · `constants.ts` (blok "Leads & analytics") · `schemas.ts` (Zod leads/analytics) |
+| API — rute | `apps/api/src/routes/leads.ts` (publik + operator) · `apps/api/src/routes/analytics.ts` · `apps/api/src/leadLimiter.ts` (kuota bersama) |
+| API — halaman tamu | `apps/api/src/routes/gallery.ts` (`leadFormHtml`, cookie kunjungan harian) · `apps/api/src/pages.ts` (CSS form) |
+| Studio | `apps/studio/src/components/LeadsPanel.tsx` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.ts` |
+| E2E | `e2e/phase9-leads.e2e.mjs` (10 bagian, **57 pemeriksaan**) |
+| Tes | `packages/shared/src/leads.test.ts` (37) · `apps/api/src/routes/leads.test.ts` (34) · `apps/api/src/routes/analytics.test.ts` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.test.ts` |
+
+**Task**
+
+- [x] Field custom: `text` / `email` / `phone` / `select` / `checkbox` — CRUD operator, `key` selalu diturunkan server dari label (dua label sama tidak saling menimpa)
+- [x] `required` + teks consent + **boleh dilewati** (form opsional di bawah galeri; tamu tidak dipaksa mengisi)
+- [x] **Consent UU PDP dipaksa di satu tempat** (`storeLead`): tanpa `consent` tidak ada baris yang ditulis — berlaku di jalur JSON **dan** jalur form HTML
+- [x] Export CSV dengan kolom dari **definisi field aktif**, bukan dari kunci yang kebetulan ada di baris; BOM UTF-8 supaya Excel benar membuka huruf beraksen
+- [x] Hak hapus (UU PDP): `DELETE` operator benar-benar menghapus baris, bukan menyembunyikan; hapus kedua → `404`
+- [x] Analytics **per acara**: kunjungan, galeri, foto, kiriman — "satu angka, satu definisi"; "kunjungan" = orang yang belum membuka halaman galeri hari itu (cookie penanda, idempoten per hari lokal)
+- [x] Halaman tamu menjelaskan tiap hasil: `?status=terkirim` / `gagal` / `penuh`
+- [x] Rate-limit + honeypot di jalur tamu; kuota **dibagi** antara `POST /v1/leads` dan form galeri (bukan dua hitungan terpisah)
+- [x] Panel studio: daftar field, daftar kiriman, unduh CSV, hapus kiriman — dipisah dua lapis (klien HTTP murni + controller tanpa React + pembungkus hook + komponen) supaya janji non-UI teruji tanpa React
+- [x] Klien divalidasi **per-item**: satu baris balasan rusak dibuang, sisanya tetap tampil (panel tidak dikosongkan)
+- [ ] Branding/white-label (logo, heading, subheading) → **ditunda: menyusul Fase 7/8**
+- [ ] Sharing (email / SMS / sosial / WhatsApp deep link / branded share page + OG image) → **ditunda**
+- [ ] Auto-print + copies + print queue/retry/reprint → **ditunda** (butuh printer, Fase 12)
+- [ ] Toggle tombol gallery/print/share + warning keluar di kiosk → **ditunda**
+- [ ] Video guestbook → **ditunda: butuh Fase 7** (video)
+- [ ] Konfirmasi email/WA + reminder H-1 (deferral Fase 11) → **ditunda: belum ada SMTP/WA di infra**
+
+**Kriteria terima (FEATURE-MATRIX):** §B baris **Fase = 9** — yang tertutup sekarang: #73, #74, #75, #76, #77, #78. Sisanya (#19, #44, #46, #51, #52, #56–#61) ditunda seperti di atas.
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm typecheck && pnpm build
+pnpm test
+node e2e/phase9-leads.e2e.mjs
+```
+
+- [x] E2E pakai HTTP sungguhan (server proses terpisah + DB scratch `foto-booth.sqlite`): form tamu → tersimpan → CSV → analytics → nonaktif field → hapus → kuota — `e2e/phase9-leads.e2e.mjs`, **57 pemeriksaan lulus**
+- [x] **Tanpa consent tidak ada yang tersimpan** — diuji di kedua pintu masuk (`leads.test.ts` JSON & form)
+- [x] Honeypot terisi → jawab sukses palsu, nol baris ditulis (`leads.test.ts`)
+- [x] CSV berkolom definisi field + `Content-Disposition` nama berkas + BOM (`leads.test.ts`, `downloadCsv.test.ts`)
+- [x] Hak hapus benar-benar menghapus; hapus kedua `404` (`leads.test.ts`, e2e bagian 9)
+- [x] Kunjungan dihitung **sekali per hari**, bukan per muat (e2e bagian 4 & 8, cookie sama)
+- [x] Kiriman beruntun lewat **form galeri** ditahan dan dilaporkan `?status=penuh`, bukan "isian salah" (`leads.test.ts` + e2e bagian 10)
+- [x] Kuota tidak bisa digandakan dengan berpindah jalur (`leads.test.ts` — "kuota dibagi antara form galeri dan POST /v1/leads")
+- [x] Field nonaktif hilang dari form tamu tapi tetap tersimpan untuk riwayat (e2e bagian 9)
+- [ ] CI hijau + container healthy → dijalankan di gate deploy
+
+**Gate keluar:** ⛔ **belum terpenuhi** — bagian branding/sharing/auto-print/video-guestbook dan konfirmasi email/WA belum ada. Inti Leads (field custom, consent, CSV, hak hapus) dan Analytics per acara **sudah** terbukti lewat tes + e2e.
+
+**Bukti** (2026-10-14)
+
+- `pnpm lint` → 0 · `pnpm typecheck` → 0 (shared · api · studio) · `pnpm build` → 0
+- Tes: shared **107** · api **119** · studio **702** — semua hijau, 0 gagal
+- `node e2e/phase9-leads.e2e.mjs` → **57 pemeriksaan lulus**
+- Satu bug nyata ditemukan & diperbaiki oleh e2e ini: pembatas laju hanya terpasang di `POST /v1/leads`, sedangkan jalur yang benar-benar dipakai tamu (`POST /a/:hash/lead`) tidak dibatasi sama sekali — sekarang satu `leadLimiter` dipakai bersama, jadi kuota tidak bisa digandakan dengan berpindah pintu.
+
+---
+
 ## Fase 11 — Booking & reservasi
 
 **Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13). **Belum bisa ditutup** (`[x]`) karena Fase 7–10 belum jalan, dan dua dependensi kerasnya masih stub: deposit QRIS (Fase 10) dan reminder email/WA (Fase 9). Payment gateway sengaja **belum dikonekkan** atas permintaan pemilik.
@@ -619,12 +689,12 @@ operator saat siap (tidak ikut git).
 - [x] `POST /v1/booking/requests` → buat permintaan (status `requested`)
 - [x] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
 - [x] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
-- [ ] Konfirmasi via email + link WhatsApp siap kirim → **ditunda: butuh Fase 9** (belum ada SMTP/WA di infra)
+- [ ] Konfirmasi via email + link WhatsApp siap kirim → **ditunda: butuh SMTP/WA** (inti Fase 9 sudah ada; kanal kirimnya belum)
 - [ ] Deposit QRIS → `depositStatus` berubah dari webhook → **ditunda: butuh Fase 10**. Provider pembayaran sudah berupa interface (`deposit.ts`); provider `qris` **melempar** dan ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk.
 - [x] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
 - [x] Reschedule oleh klien (batas: minimal `minNoticeHours` jam sebelumnya)
 - [x] Cancel oleh klien + kebijakan batas waktu
-- [ ] Reminder H-1 otomatis (job harian) via email + WhatsApp → **ditunda: butuh Fase 9**
+- [ ] Reminder H-1 otomatis (job harian) via email + WhatsApp → **ditunda: butuh SMTP/WA** (inti Fase 9 sudah ada)
 - [x] Dashboard booking + kalender operator (harian/mingguan)
 - [ ] Invoice + kwitansi + lacak pelunasan → **ditunda: butuh Fase 10** (angka pendapatan sudah ada di laporan okupansi)
 - [x] **Booking → event**: approve bikin record event (nama + tanggal dari slot), jadi tidak perlu input ulang di hari-H — idempoten, reschedule menggeser tanggalnya, tidak pernah bikin event kedua
@@ -650,7 +720,7 @@ node e2e/phase11-booking.e2e.mjs
 - [x] Tanggal diblokir → tidak muncul sebagai slot tersedia (`booking.test.ts` — "ketersediaan menandai slot terisi dan tanggal tutup")
 - [ ] Webhook deposit palsu (tanda tangan salah) → ditolak → **ditunda: butuh Fase 10**. Yang bisa dibuktikan sekarang: provider `qris` ditolak `400` dan deposit tidak pernah `paid` tanpa operator menandainya.
 - [x] Link status tanpa token / token salah → `404` (bukan bocor data booking orang lain)
-- [ ] Reminder H-1: uji dengan **tanggal dimajukan** → email/WA terkirim tepat sekali → **ditunda: butuh Fase 9**
+- [ ] Reminder H-1: uji dengan **tanggal dimajukan** → email/WA terkirim tepat sekali → **ditunda: butuh SMTP/WA**
 - [x] Reschedule di bawah batas waktu → ditolak dengan pesan jelas (`too_soon`; tamu dan operator sama-sama kena)
 - [x] Approve → **record event benar-benar ada** dan bisa dipakai di studio (dibaca dari DB, bukan asumsi; reschedule menggeser tanggal event, tidak menggandakan)
 - [x] Form publik: submit beruntun → kena rate-limit (`429` + `retry-after`; e2e langkah 10 memakai 6 percobaan dari satu IP)

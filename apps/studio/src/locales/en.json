@@ -119,6 +119,7 @@
     "template": "Template editor",
     "gallery": "Gallery & upload",
     "booking": "Booking & reservations",
+    "leads": "Leads & analytics",
     "kiosk": "Kiosk mode"
   },
   "template": {
@@ -384,6 +385,72 @@
       "providerNote": "Only manual mode is available. Gateway options appear in the payments phase.",
       "requireDeposit": "Require a deposit before locking the slot",
       "save": "Save settings"
+    }
+  },
+  "leads": {
+    "title": "Leads & analytics",
+    "signedOut": "Sign in as an operator in the Gallery & upload tab first. The session is shared, so one sign-in covers every tab.",
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "refresh": "Reload",
+    "export": "Download CSV",
+    "exporting": "Preparing…",
+    "analytics": {
+      "title": "Per-event numbers",
+      "noData": "Numbers could not be loaded.",
+      "empty": "No events in this range.",
+      "events": "Events",
+      "galleries": "Galleries",
+      "photos": "Photos",
+      "views": "Visits",
+      "leads": "Guest data",
+      "cellGalleries": "{{count}} galleries",
+      "cellPhotos": "{{count}} photos",
+      "cellViews": "{{count}} visits",
+      "cellLeads": "{{count}} guest entries",
+      "viewsNote": "A visit is counted once per gallery per day — one person hitting refresh does not inflate the number."
+    },
+    "data": {
+      "title": "Guest data",
+      "count": "{{count}} rows",
+      "empty": "No guest data has come in yet.",
+      "delete": "Remove"
+    },
+    "table": {
+      "time": "Time",
+      "gallery": "Gallery",
+      "consent": "Consent",
+      "yes": "yes",
+      "no": "no",
+      "noGallery": "—"
+    },
+    "fields": {
+      "title": "Guest data fields",
+      "note": "Fields are created here, not in code. The key is derived once from the label and used as the CSV column name — renaming the label does not change old columns.",
+      "count": "{{count}} fields",
+      "countOf": "{{count}}/{{max}} fields",
+      "empty": "No fields yet. Without fields, the guest form asks for nothing.",
+      "required": "required",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "delete": "Delete",
+      "label": "Label",
+      "type": "Type",
+      "options": "Choices",
+      "optionsHint": "e.g. Male, Female",
+      "requiredLabel": "Required",
+      "add": "Add field"
+    },
+    "fieldType": {
+      "text": "Text",
+      "email": "Email",
+      "phone": "Phone",
+      "select": "Choice",
+      "checkbox": "Checkbox"
+    },
+    "consent": {
+      "title": "UU PDP consent",
+      "note": "This sentence is shown to guests and stored verbatim alongside their data, with its version. If the wording changes, old records still prove which version was agreed to."
     }
   }
 }

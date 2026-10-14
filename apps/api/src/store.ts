@@ -20,6 +20,8 @@ import type {
   EntitlementPlan,
   Event,
   Gallery,
+  Lead,
+  LeadField,
   Photo,
 } from "@foto-booth/shared";
 
@@ -731,4 +733,376 @@ export function saveBookingSettings(db: Db, settings: BookingSettings, now: stri
     `INSERT INTO booking_settings (id, json, updated_at) VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
   ).run(JSON.stringify(settings), now);
+}
+
+/* ------------------------------------------------------------------ *
+ * Leads — definisi field (Fase 9)
+ * ------------------------------------------------------------------ */
+
+function toLeadField(raw: Record<string, unknown>): LeadField {
+  let options: string[] = [];
+  if (typeof raw.options === "string") {
+    try {
+      const parsed: unknown = JSON.parse(raw.options);
+      if (Array.isArray(parsed)) options = parsed.filter((item): item is string => typeof item === "string");
+    } catch {
+      // JSON rusak diperlakukan sebagai "tidak ada pilihan" — field `select`
+      // tanpa pilihan akan menolak semua kiriman, yang lebih mudah dilihat
+      // operator daripada diam-diam menerima teks bebas.
+      options = [];
+    }
+  }
+
+  return {
+    id: str(raw.id),
+    eventId: typeof raw.event_id === "string" && raw.event_id !== "" ? raw.event_id : null,
+    key: str(raw.key),
+    label: str(raw.label),
+    type: str(raw.type) as LeadField["type"],
+    required: bool(raw.required),
+    options,
+    helpText: typeof raw.help_text === "string" && raw.help_text !== "" ? raw.help_text : null,
+    sortOrder: num(raw.sort_order),
+    active: bool(raw.active),
+    createdAt: str(raw.created_at),
+  };
+}
+
+export interface LeadFieldRow {
+  eventId: string | null;
+  key: string;
+  label: string;
+  type: LeadField["type"];
+  required: boolean;
+  options: string[];
+  helpText: string | null;
+  sortOrder: number;
+  active: boolean;
+}
+
+export function insertLeadField(db: Db, id: string, row: LeadFieldRow, createdAt: string): LeadField {
+  db.prepare(
+    `INSERT INTO lead_fields
+       (id, event_id, key, label, type, required, options, help_text, sort_order, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.eventId,
+    row.key,
+    row.label,
+    row.type,
+    row.required ? 1 : 0,
+    JSON.stringify(row.options),
+    row.helpText,
+    row.sortOrder,
+    row.active ? 1 : 0,
+    createdAt,
+  );
+  return toLeadField(db.prepare("SELECT * FROM lead_fields WHERE id = ?").get(id)!);
+}
+
+/**
+ * Ubah definisi field.
+ *
+ * `key` dan `eventId` sengaja **tidak** ikut diubah: nilai yang sudah
+ * terkumpul menyimpan data di bawah `key` lama, dan memindahkan field ke event
+ * lain akan membuat baris lama menunjuk acara yang salah.
+ */
+export function updateLeadField(
+  db: Db,
+  id: string,
+  patch: Partial<Omit<LeadFieldRow, "key" | "eventId">>,
+): LeadField | null {
+  const current = getLeadField(db, id);
+  if (current === null) return null;
+
+  // `created_at` tidak ikut ditulis: kolomnya penanda urutan "dibuat dulu",
+  // dan mengubahnya saat edit akan mengacak urutan daftar field.
+  db.prepare(
+    `UPDATE lead_fields SET
+       label = ?, required = ?, options = ?, help_text = ?, sort_order = ?, active = ?
+     WHERE id = ?`,
+  ).run(
+    patch.label ?? current.label,
+    (patch.required ?? current.required) ? 1 : 0,
+    JSON.stringify(patch.options ?? current.options),
+    patch.helpText === undefined ? current.helpText : patch.helpText,
+    patch.sortOrder ?? current.sortOrder,
+    (patch.active ?? current.active) ? 1 : 0,
+    id,
+  );
+  return getLeadField(db, id);
+}
+
+export function getLeadField(db: Db, id: string): LeadField | null {
+  const raw = db.prepare("SELECT * FROM lead_fields WHERE id = ?").get(id);
+  return raw === undefined ? null : toLeadField(raw);
+}
+
+/**
+ * Field untuk satu event: yang global (`event_id IS NULL`) plus milik event itu.
+ *
+ * `eventId: null` → hanya field global. Ini dipakai halaman tamu yang tidak
+ * punya konteks event.
+ */
+export function listLeadFields(
+  db: Db,
+  filter: { eventId?: string | null; activeOnly?: boolean } = {},
+): LeadField[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.eventId === null) {
+    where.push("event_id IS NULL");
+  } else if (filter.eventId !== undefined) {
+    where.push("(event_id IS NULL OR event_id = ?)");
+    params.push(filter.eventId);
+  }
+  if (filter.activeOnly === true) where.push("active = 1");
+
+  return db
+    .prepare(
+      `SELECT * FROM lead_fields
+       ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY sort_order ASC, label ASC`,
+    )
+    .all(...params)
+    .map(toLeadField);
+}
+
+/** Field milik satu event saja — dipakai saat mengecek batas jumlah field. */
+export function countLeadFields(db: Db, eventId: string | null): number {
+  const raw =
+    eventId === null
+      ? db.prepare("SELECT COUNT(*) AS n FROM lead_fields WHERE event_id IS NULL").get()
+      : db.prepare("SELECT COUNT(*) AS n FROM lead_fields WHERE event_id = ?").get(eventId);
+  return num(raw?.n);
+}
+
+/**
+ * Hapus definisi field.
+ *
+ * Nilai yang sudah dikumpulkan **tidak** ikut terhapus: `leads.values_json`
+ * menyimpan kuncinya sendiri, jadi riwayat tetap terbaca walau field-nya
+ * hilang. Operator yang cuma ingin berhenti menanyakan sesuatu memakai
+ * `active = false`, bukan ini.
+ */
+export function deleteLeadField(db: Db, id: string): number {
+  return Number(db.prepare("DELETE FROM lead_fields WHERE id = ?").run(id).changes);
+}
+
+/* ------------------------------------------------------------------ *
+ * Leads — kiriman tamu (Fase 9)
+ * ------------------------------------------------------------------ */
+
+function toLead(raw: Record<string, unknown>): Lead {
+  let values: Lead["values"] = {};
+  if (typeof raw.values_json === "string") {
+    try {
+      const parsed: unknown = JSON.parse(raw.values_json);
+      if (parsed !== null && typeof parsed === "object") values = parsed as Lead["values"];
+    } catch {
+      values = {};
+    }
+  }
+
+  return {
+    id: str(raw.id),
+    eventId: typeof raw.event_id === "string" && raw.event_id !== "" ? raw.event_id : null,
+    galleryId: typeof raw.gallery_id === "string" && raw.gallery_id !== "" ? raw.gallery_id : null,
+    values,
+    consent: bool(raw.consent),
+    consentText: str(raw.consent_text),
+    consentVersion: str(raw.consent_version),
+    source: str(raw.source),
+    createdAt: str(raw.created_at),
+  };
+}
+
+export interface LeadRow {
+  eventId: string | null;
+  galleryId: string | null;
+  values: Lead["values"];
+  consent: boolean;
+  consentText: string;
+  consentVersion: string;
+  source: string;
+}
+
+export function insertLead(db: Db, id: string, row: LeadRow, createdAt: string): Lead {
+  db.prepare(
+    `INSERT INTO leads
+       (id, event_id, gallery_id, values_json, consent, consent_text, consent_version, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.eventId,
+    row.galleryId,
+    JSON.stringify(row.values),
+    row.consent ? 1 : 0,
+    row.consentText,
+    row.consentVersion,
+    row.source,
+    createdAt,
+  );
+  return toLead(db.prepare("SELECT * FROM leads WHERE id = ?").get(id)!);
+}
+
+export function getLead(db: Db, id: string): Lead | null {
+  const raw = db.prepare("SELECT * FROM leads WHERE id = ?").get(id);
+  return raw === undefined ? null : toLead(raw);
+}
+
+export interface LeadFilter {
+  eventId?: string | undefined;
+  galleryId?: string | undefined;
+  /** Batas bawah `created_at` (ISO, inklusif). */
+  from?: string | undefined;
+  limit?: number | undefined;
+}
+
+/** Terbaru dulu — operator hampir selalu mencari kiriman yang baru masuk. */
+export function listLeads(db: Db, filter: LeadFilter = {}): Lead[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.eventId !== undefined) {
+    where.push("event_id = ?");
+    params.push(filter.eventId);
+  }
+  if (filter.galleryId !== undefined) {
+    where.push("gallery_id = ?");
+    params.push(filter.galleryId);
+  }
+  if (filter.from !== undefined) {
+    where.push("created_at >= ?");
+    params.push(filter.from);
+  }
+
+  const sql = `SELECT * FROM leads
+    ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY created_at DESC
+    LIMIT ?`;
+  params.push(filter.limit ?? 500);
+
+  return db
+    .prepare(sql)
+    .all(...params)
+    .map(toLead);
+}
+
+export function countLeads(db: Db, eventId?: string): number {
+  const raw =
+    eventId === undefined
+      ? db.prepare("SELECT COUNT(*) AS n FROM leads").get()
+      : db.prepare("SELECT COUNT(*) AS n FROM leads WHERE event_id = ?").get(eventId);
+  return num(raw?.n);
+}
+
+/**
+ * Hapus satu kiriman.
+ *
+ * Ini yang memenuhi hak penghapusan UU PDP: tamu minta datanya dibuang, dan
+ * operator bisa benar-benar membuangnya — bukan sekadar menyembunyikannya dari
+ * daftar.
+ */
+export function deleteLead(db: Db, id: string): number {
+  return Number(db.prepare("DELETE FROM leads WHERE id = ?").run(id).changes);
+}
+
+/** Buang lead lebih tua dari `cutoff` — dipanggil job harian. */
+export function deleteLeadsOlderThan(db: Db, cutoff: string): number {
+  return Number(db.prepare("DELETE FROM leads WHERE created_at < ?").run(cutoff).changes);
+}
+
+/* ------------------------------------------------------------------ *
+ * Analytics — kunjungan galeri (Fase 9)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Catat satu buka halaman galeri pada hari lokal.
+ *
+ * Barisnya dibatasi satu per (galeri, hari) — bukan satu per kunjungan. Tabel
+ * ini tumbuh oleh trafik tamu, dan menyimpan satu baris per muat halaman akan
+ * membuatnya jadi tabel terbesar di DB hanya untuk sebuah angka di dasbor.
+ *
+ * Pemanggil yang tidak ingin satu orang menekan refresh menaikkan angkanya
+ * sepuluh kali harus menyaringnya sendiri (halaman galeri memakai cookie
+ * harian untuk itu) — fungsi ini sengaja hanya menjumlah, supaya tidak ada
+ * asumsi tersembunyi tentang identitas tamu di lapisan data.
+ */
+export function bumpGalleryView(db: Db, galleryId: string, day: string): void {
+  db.prepare(
+    `INSERT INTO gallery_views (gallery_id, day, views) VALUES (?, ?, 1)
+     ON CONFLICT(gallery_id, day) DO UPDATE SET views = views + 1`,
+  ).run(galleryId, day);
+}
+
+/** Total kunjungan untuk satu galeri; `0` kalau belum pernah dibuka. */
+export function countGalleryViews(db: Db, galleryId: string): number {
+  return num(
+    db.prepare("SELECT COALESCE(SUM(views), 0) AS n FROM gallery_views WHERE gallery_id = ?").get(galleryId)?.n,
+  );
+}
+
+/** Kunjungan per galeri untuk sekumpulan id, sebagai map — satu query, bukan N. */
+export function galleryViewsByGallery(db: Db, galleryIds: readonly string[]): Map<string, number> {
+  const result = new Map<string, number>();
+  if (galleryIds.length === 0) return result;
+
+  const placeholders = galleryIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT gallery_id, SUM(views) AS n FROM gallery_views
+       WHERE gallery_id IN (${placeholders})
+       GROUP BY gallery_id`,
+    )
+    .all(...galleryIds);
+
+  for (const row of rows) result.set(str(row.gallery_id), num(row.n));
+  return result;
+}
+
+export interface EventCounts {
+  galleries: number;
+  photos: number;
+  views: number;
+  leads: number;
+}
+
+/**
+ * Angka per acara untuk dasbor — satu query, bukan lima per acara.
+ *
+ * Subquery, bukan `LEFT JOIN ... GROUP BY`: menggabungkan `galleries` ×
+ * `photos` × `gallery_views` dalam satu join membuat tiap baris foto
+ * menggandakan hitungan kunjungan, dan angka yang salah seperti itu tidak
+ * kelihatan salahnya sampai ada yang menjumlahkan manual.
+ */
+export function eventCounts(db: Db): Map<string, EventCounts> {
+  const rows = db
+    .prepare(
+      `SELECT
+         e.id AS event_id,
+         (SELECT COUNT(*) FROM galleries g WHERE g.event_id = e.id) AS galleries,
+         (SELECT COUNT(*) FROM photos p
+            JOIN galleries g ON p.gallery_id = g.id
+           WHERE g.event_id = e.id) AS photos,
+         (SELECT COALESCE(SUM(v.views), 0) FROM gallery_views v
+            JOIN galleries g ON v.gallery_id = g.id
+           WHERE g.event_id = e.id) AS views,
+         (SELECT COUNT(*) FROM leads l WHERE l.event_id = e.id) AS leads
+       FROM events e`,
+    )
+    .all();
+
+  const result = new Map<string, EventCounts>();
+  for (const row of rows) {
+    result.set(str(row.event_id), {
+      galleries: num(row.galleries),
+      photos: num(row.photos),
+      views: num(row.views),
+      leads: num(row.leads),
+    });
+  }
+  return result;
 }

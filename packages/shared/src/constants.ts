@@ -90,3 +90,19 @@ export const BOOKING_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 /** Panjang maksimum alasan tolak/batal yang ditampilkan ke tamu. */
 export const BOOKING_REASON_MAX = 500;
+
+/* ------------------------------------------------------------------ *
+ * Leads & analytics (Fase 9)
+ * ------------------------------------------------------------------ */
+
+/** Batas kiriman lead dari satu IP (per jendela di bawah). */
+export const LEAD_RATE_LIMIT = 10;
+
+/** Jendela pembatas kiriman lead (milidetik) — satu jam. */
+export const LEAD_RATE_WINDOW_MS = 60 * 60 * 1000;
+
+/** Batas jumlah field yang boleh dikonfigurasi operator (global + per event). */
+export const LEAD_MAX_FIELDS = 40;
+
+/** Batas baris CSV yang diunduh sekaligus. */
+export const LEAD_EXPORT_LIMIT = 5000;

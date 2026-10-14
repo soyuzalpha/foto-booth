@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { parse as parseQuerystring } from "node:querystring";
 
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -11,9 +12,11 @@ import { authRoutes } from "./routes/auth.ts";
 import { bookingPageRoutes } from "./routes/booking-pages.ts";
 import { bookingRoutes } from "./routes/booking.ts";
 import { contentRoutes } from "./routes/content.ts";
+import { analyticsRoutes } from "./routes/analytics.ts";
 import { galleryRoutes } from "./routes/gallery.ts";
 import { galleryOperatorRoutes } from "./routes/galleries.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { leadRoutes } from "./routes/leads.ts";
 import { modelRoutes } from "./routes/models.ts";
 import { scheduleTtlCleanup } from "./jobs/ttl.ts";
 
@@ -36,6 +39,23 @@ export async function buildApp(
   // Urutan tidak menentukan prioritas (router Fastify menang urut spesifisitas:
   // static > param > wildcard), tapi didaftarkan dulu supaya jelas.
   await healthRoutes(app);
+
+  // Browser mengirim form HTML sebagai `application/x-www-form-urlencoded`, dan
+  // Fastify hanya mem-parse JSON & text/plain secara bawaan. Tanpa parser ini
+  // setiap POST dari form dijawab 415 — halaman buka-kunci galeri jadi mustahil
+  // dipakai dari browser, walau handler-nya benar.
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      try {
+        done(null, parseQuerystring(body as string));
+      } catch (error) {
+        done(error as Error);
+      }
+    },
+  );
+
   await authRoutes(app, ctx);
   // Galeri operator didaftarkan sebelum galeri publik: `/v1/galleries` (API)
   // dan `/a/:hash` (halaman tamu) tidak bertabrakan, tapi urutan ini membuat
@@ -48,6 +68,12 @@ export async function buildApp(
   await bookingRoutes(app, ctx);
   await bookingPageRoutes(app, ctx);
   await contentRoutes(app);
+  // Leads tamu + konfigurasi field operator, dan dasbor analytics. Didaftarkan
+  // setelah galeri karena rute publiknya (`/v1/leads/*`) memakai hash galeri
+  // yang sama — urutan di sini hanya soal keterbacaan, router Fastify memilih
+  // berdasarkan spesifisitas.
+  await leadRoutes(app, ctx);
+  await analyticsRoutes(app, ctx);
 
   // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.
   await modelRoutes(app);

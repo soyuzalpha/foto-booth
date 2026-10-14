@@ -119,6 +119,7 @@
     "template": "Editor template",
     "gallery": "Galeri & upload",
     "booking": "Booking & reservasi",
+    "leads": "Leads & analytics",
     "kiosk": "Mode kiosk"
   },
   "template": {
@@ -384,6 +385,72 @@
       "providerNote": "Hanya mode manual yang tersedia. Opsi gateway otomatis muncul di fase pembayaran.",
       "requireDeposit": "Wajibkan deposit sebelum slot dikunci",
       "save": "Simpan setelan"
+    }
+  },
+  "leads": {
+    "title": "Leads & analytics",
+    "signedOut": "Masuk sebagai operator di tab Galeri & upload dulu. Sesi dipakai bersama, jadi sekali masuk semua tab ikut.",
+    "loading": "Memuat…",
+    "saving": "Menyimpan…",
+    "refresh": "Muat ulang",
+    "export": "Unduh CSV",
+    "exporting": "Menyiapkan…",
+    "analytics": {
+      "title": "Angka per acara",
+      "noData": "Angka belum bisa dimuat.",
+      "empty": "Belum ada acara di rentang ini.",
+      "events": "Acara",
+      "galleries": "Galeri",
+      "photos": "Foto",
+      "views": "Kunjungan",
+      "leads": "Data tamu",
+      "cellGalleries": "{{count}} galeri",
+      "cellPhotos": "{{count}} foto",
+      "cellViews": "{{count}} kunjungan",
+      "cellLeads": "{{count}} data tamu",
+      "viewsNote": "Kunjungan dihitung sekali per galeri per hari — satu orang yang menekan refresh tidak menaikkan angkanya."
+    },
+    "data": {
+      "title": "Data tamu",
+      "count": "{{count}} baris",
+      "empty": "Belum ada data tamu yang masuk.",
+      "delete": "Buang"
+    },
+    "table": {
+      "time": "Waktu",
+      "gallery": "Galeri",
+      "consent": "Consent",
+      "yes": "ya",
+      "no": "tidak",
+      "noGallery": "—"
+    },
+    "fields": {
+      "title": "Field data tamu",
+      "note": "Field dibuat di sini, bukan di kode. Kuncinya diturunkan sekali dari label dan dipakai sebagai nama kolom CSV — mengganti label tidak mengubah kolom lama.",
+      "count": "{{count}} field",
+      "countOf": "{{count}}/{{max}} field",
+      "empty": "Belum ada field. Tanpa field, form data tamu tidak menanyakan apa pun.",
+      "required": "wajib",
+      "deactivate": "Nonaktifkan",
+      "activate": "Aktifkan",
+      "delete": "Hapus",
+      "label": "Label",
+      "type": "Tipe",
+      "options": "Pilihan",
+      "optionsHint": "mis. Laki-laki, Perempuan",
+      "requiredLabel": "Wajib diisi",
+      "add": "Tambah field"
+    },
+    "fieldType": {
+      "text": "Teks",
+      "email": "Email",
+      "phone": "Telepon",
+      "select": "Pilihan",
+      "checkbox": "Centang"
+    },
+    "consent": {
+      "title": "Consent UU PDP",
+      "note": "Kalimat ini ditampilkan ke tamu dan disimpan apa adanya bersama datanya, beserta versinya. Kalau kalimatnya berubah, data lama tetap bisa dibuktikan menyetujui versi yang mana."
     }
   }
 }

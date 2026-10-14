@@ -24,21 +24,28 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   GALLERY_BASE_PATH,
   GALLERY_TTL_DAYS,
+  LEAD_CONSENT_TEXT,
   UnlockGallerySchema,
+  activeFieldsFor,
   type Gallery,
+  type LeadField,
 } from "@foto-booth/shared";
 
 import { signJwt, verifyJwt } from "../jwt.ts";
 import { getObject } from "../objectStore.ts";
 import { verifySecret } from "../secrets.ts";
 import {
+  bumpGalleryView,
   getEvent,
   getGalleryByHash,
   getGalleryPassword,
+  listLeadFields,
   listPhotos,
 } from "../store.ts";
 import type { ServerContext } from "../context.ts";
+import { leadLimiter } from "../leadLimiter.ts";
 import { errorPage, escapeHtml, shell } from "../pages.ts";
+import { storeLead } from "./leads.ts";
 import { buildZip, type ZipEntry } from "../zip.ts";
 
 /** Umur cookie buka-kunci. Cukup untuk sesi berbagi foto, tidak setahun. */
@@ -108,6 +115,87 @@ function passwordPage(hash: string, failed: boolean): string {
 
 /* ---- Bantu -------------------------------------------------------- */
 
+/**
+ * Cookie penanda "sudah dihitung hari ini" untuk satu galeri.
+ *
+ * Tanpa ini, satu orang yang menekan refresh lima kali membuat angka
+ * kunjungan di dasbor naik lima — dan angka yang bisa dinaikkan sendiri oleh
+ * tamu tidak berguna untuk mengambil keputusan.
+ *
+ * Namanya per-galeri dan `Path`-nya di dalam galeri itu, jadi membuka dua
+ * galeri berbeda di hari yang sama tetap dihitung dua kunjungan.
+ */
+function viewCookieName(hash: string): string {
+  return `fb_seen_${hash}`;
+}
+
+/** Hari (UTC) — cukup untuk granularitas harian, dan deterministik di tes. */
+function viewDay(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Satu input form sesuai tipe field. */
+function leadInput(field: LeadField): string {
+  const name = escapeHtml(field.key);
+  const label = escapeHtml(field.label);
+  const help = field.helpText === null ? "" : `<small>${escapeHtml(field.helpText)}</small>`;
+  const required = field.required ? " required" : "";
+  const star = field.required ? " *" : "";
+
+  if (field.type === "checkbox") {
+    return `<label class="check"><input type="checkbox" name="${name}" value="1"${required}> ${label}${star}</label>${help}`;
+  }
+
+  if (field.type === "select") {
+    const options = field.options
+      .map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`)
+      .join("");
+    return `<label>${label}${star}<select name="${name}"${required}><option value="">— pilih —</option>${options}</select></label>${help}`;
+  }
+
+  const type = field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text";
+  return `<label>${label}${star}<input type="${type}" name="${name}"${required}></label>${help}`;
+}
+
+/**
+ * Form data tamu di bawah galeri.
+ *
+ * Dirender sebagai `<form>` biasa (bukan fetch): halaman galeri harus tetap
+ * berguna tanpa JavaScript, dan form yang bergantung pada JS akan hilang di
+ * browser lama atau saat skrip gagal dimuat.
+ *
+ * Field-nya kosong → form tidak ditampilkan sama sekali. Menampilkan form
+ * yang cuma berisi checkbox consent akan membuat tamu menyetujui sesuatu yang
+ * tidak diminta, dan itu justru masalah kepatuhan.
+ */
+function leadFormHtml(gallery: Gallery, fields: readonly LeadField[], status: string | undefined): string {
+  if (fields.length === 0) return "";
+
+  const note =
+    status === "terkirim"
+      ? `<p style="color:#0a7d3f;font-weight:700">Terima kasih — datanya sudah kami terima.</p>`
+      : status === "gagal"
+        ? `<p style="color:#c00;font-weight:700">Ada isian yang belum benar. Coba lagi ya.</p>`
+        : status === "penuh"
+          ? `<p style="color:#c00;font-weight:700">Kiriman dari jaringan ini sedang terlalu banyak. Coba lagi beberapa saat lagi.</p>`
+          : "";
+
+  return `
+    <section class="leads">
+      <h2>Isi data kamu</h2>
+      ${note}
+      <form method="post" action="${escapeHtml(`${GALLERY_BASE_PATH}${gallery.hash}/lead`)}">
+        ${fields.map(leadInput).join("\n")}
+        <label class="check">
+          <input type="checkbox" name="consent" value="1" required>
+          ${escapeHtml(LEAD_CONSENT_TEXT)}
+        </label>
+        <input type="text" name="website" tabindex="-1" autocomplete="off" class="trap" aria-hidden="true">
+        <button class="btn" type="submit">Kirim</button>
+      </form>
+    </section>`;
+}
+
 async function loadGallery(hash: string, ctx: ServerContext): Promise<Gallery | null> {
   if (!/^[A-Za-z0-9_-]{4,64}$/.test(hash)) return null;
   return getGalleryByHash(ctx.db, hash);
@@ -149,7 +237,7 @@ function extFromContentType(contentType: string): string {
 
 export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): Promise<void> {
   /* Halaman utama album. */
-  app.get<{ Params: { hash: string }; Querystring: { salah?: string } }>(
+  app.get<{ Params: { hash: string }; Querystring: { salah?: string; status?: string } }>(
     `${GALLERY_BASE_PATH}:hash`,
     async (request, reply) => {
       const gallery = await loadGallery(request.params.hash, ctx);
@@ -165,6 +253,21 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
       const event = getEvent(ctx.db, gallery.eventId);
       const photos = listPhotos(ctx.db, gallery.id);
       const base = absolute(request, `${GALLERY_BASE_PATH}${gallery.hash}`);
+
+      // Kunjungan dihitung di sini — bukan di rute terpisah — karena inilah
+      // satu-satunya tempat yang tahu halamannya benar-benar dirender ke tamu
+      // (bukan halaman password, bukan 404). Cookie harian menahan refresh.
+      const day = viewDay(ctx.now());
+      if (readCookie(request, viewCookieName(gallery.hash)) !== day) {
+        bumpGalleryView(ctx.db, gallery.id, day);
+        reply.header(
+          "set-cookie",
+          `${viewCookieName(gallery.hash)}=${day}; Path=${GALLERY_BASE_PATH}${gallery.hash}; ` +
+            `Max-Age=86400; HttpOnly; SameSite=Lax`,
+        );
+      }
+
+      const fields = activeFieldsFor(listLeadFields(ctx.db, { eventId: gallery.eventId }), gallery.eventId);
 
       const firstPhoto = photos[0];
       const ogHead = [
@@ -204,9 +307,63 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
             ? ""
             : `<div class="row"><a class="btn" href="${escapeHtml(`${base}/zip`)}">Unduh semua (${photos.length})</a></div>`
         }
-        <p class="note">Galeri ini dihapus otomatis ${GALLERY_TTL_DAYS} hari setelah dibuat.</p>`;
+        <p class="note">Galeri ini dihapus otomatis ${GALLERY_TTL_DAYS} hari setelah dibuat.</p>
+        ${leadFormHtml(gallery, fields, request.query.status)}`;
 
       return reply.type("text/html; charset=utf-8").send(shell(event?.name ?? "Galeri foto", body, ogHead));
+    },
+  );
+
+  /* Form data tamu (Fase 9). */
+  app.post<{ Params: { hash: string }; Body: Record<string, unknown> }>(
+    `${GALLERY_BASE_PATH}:hash/lead`,
+    async (request, reply) => {
+      const gallery = await loadGallery(request.params.hash, ctx);
+      if (gallery === null) return reply.status(404).type("text/html; charset=utf-8").send(NOT_FOUND_HTML);
+      if (isLocked(request, gallery, ctx)) {
+        return reply.redirect(`${GALLERY_BASE_PATH}${gallery.hash}`, 303);
+      }
+
+      // Honeypot: kolom tersembunyi yang hanya diisi bot. Diisi → pura-pura
+      // sukses (303 ke ?status=terkirim) supaya bot tidak belajar bahwa
+      // kirimannya ditolak dan mencoba lagi dengan kolom itu dikosongkan.
+      const raw = (request.body ?? {}) as Record<string, unknown>;
+      if (typeof raw.website === "string" && raw.website.trim() !== "") {
+        return reply.redirect(`${GALLERY_BASE_PATH}${gallery.hash}?status=terkirim`, 303);
+      }
+
+      // Kuota kiriman. Diperiksa **sebelum** apa pun ditulis, dan dengan
+      // pembatas yang sama seperti `POST /v1/leads`: satu orang tidak bisa
+      // membanjiri tabel lewat jalur mana pun.
+      const verdict = leadLimiter(ctx).check(request.ip);
+      if (!verdict.allowed) {
+        return reply.redirect(`${GALLERY_BASE_PATH}${gallery.hash}?status=penuh`, 303);
+      }
+
+      const fields = activeFieldsFor(listLeadFields(ctx.db, { eventId: gallery.eventId }), gallery.eventId);
+      const values: Record<string, string | boolean> = {};
+      for (const field of fields) {
+        const value = raw[field.key];
+        if (field.type === "checkbox") {
+          // `true`, bukan `"1"`: validator shared menerima boolean apa adanya,
+          // dan menyimpan string di sini membuat nilai checkbox tampil "1"
+          // alih-alih "ya" di CSV.
+          if (value === "1" || value === "on" || value === true) values[field.key] = true;
+        } else if (typeof value === "string") {
+          values[field.key] = value;
+        }
+      }
+
+      const stored = storeLead(ctx, {
+        galleryHash: gallery.hash,
+        eventId: gallery.eventId,
+        values,
+        consent: raw.consent === "1" || raw.consent === "on" || raw.consent === true,
+      });
+      return reply.redirect(
+        `${GALLERY_BASE_PATH}${gallery.hash}?status=${stored.ok ? "terkirim" : "gagal"}`,
+        303,
+      );
     },
   );
 
