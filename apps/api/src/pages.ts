@@ -58,8 +58,8 @@ ${head}
            padding:4px 12px; font-weight:800; font-size:13px; text-transform:uppercase;
            letter-spacing:.06em; margin-bottom:16px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:14px; margin:20px 0 0; }
-  .grid a { display:block; }
-  .grid img { width:100%; aspect-ratio:3/4; object-fit:cover; border:3px solid var(--ink); background:#eee; display:block; }
+  .grid a { display:block; position:relative; }
+  .grid img, .grid video { width:100%; aspect-ratio:3/4; object-fit:cover; border:3px solid var(--ink); background:#eee; display:block; }
   a.btn, button.btn { display:inline-block; background:var(--pink); color:var(--ink); border:3px solid var(--ink);
           box-shadow:5px 5px 0 var(--ink); padding:12px 22px; font-weight:800; text-decoration:none;
           font-size:16px; cursor:pointer; font-family:inherit; }

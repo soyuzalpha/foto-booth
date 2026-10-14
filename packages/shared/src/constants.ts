@@ -21,6 +21,27 @@ export const GALLERY_TTL_DAYS = 30;
 /** Batas ukuran satu foto (byte). 25 MB cukup untuk JPEG 6000×4000. */
 export const PHOTO_MAX_BYTES = 25 * 1024 * 1024;
 
+/**
+ * Batas ukuran satu video (byte). 200 MB.
+ *
+ * Video jauh lebih besar daripada foto pada durasi yang sama — 15 detik 1080p
+ * 30 fps ≈ 12 MB, tapi 60 detik 4K bisa melewati 150 MB. Batasnya sengaja
+ * longgar: menolak video tamu di tengah pesta lebih buruk daripada memakai
+ * sedikit ruang bucket, dan TTL 30 hari membersihkannya sendiri.
+ */
+export const VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Batas ukuran per jenis konten.
+ *
+ * Dipakai satu tempat supaya studio dan API tidak pernah menghitung sendiri:
+ * mengirim video ke endpoint foto (atau sebaliknya) akan ditolak dengan batas
+ * yang salah — kegagalan yang cuma muncul di lapangan, bukan di tes.
+ */
+export function maxBytesForContentType(contentType: string): number {
+  return contentType.startsWith("video/") ? VIDEO_MAX_BYTES : PHOTO_MAX_BYTES;
+}
+
 /** Umur URL presigned (detik). Cukup lama untuk upload di 4G, pendek untuk aman. */
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 

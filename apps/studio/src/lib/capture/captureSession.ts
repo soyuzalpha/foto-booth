@@ -211,6 +211,18 @@ export class CaptureSession {
     return this.transport.videoElement?.() ?? null;
   }
 
+  /**
+   * Stream kamera yang sedang aktif, atau `null`.
+   *
+   * Dipakai perekam video (Fase 7): `MediaRecorder` butuh `MediaStream`, bukan
+   * elemen `<video>`. Elemennya cuma tempat menampilkan; stream-nya milik
+   * transport, dan di sini ia diteruskan apa adanya — tanpa disalin, karena
+   * `MediaStream` yang disalin tidak ikut membawa track baru.
+   */
+  stream(): MediaStream | null {
+    return this.transport.stream();
+  }
+
   /** Setelan nyata stream — dipakai validasi resolusi. */
   settings(): MediaTrackSettings | null {
     return this.transport.settings?.() ?? null;

@@ -207,6 +207,18 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_gallery_views_day ON gallery_views(day);
     `,
   },
+  {
+    id: 5,
+    name: "photo-content-type",
+    // Fase 7. Sebelum ini semua foto pasti JPEG, jadi MIME tidak pernah perlu
+    // disimpan. Begitu video masuk ke galeri yang sama, halaman tamu harus tahu
+    // mana yang `<img>` dan mana yang `<video controls>` — dan menebaknya dari
+    // ekstensi key salah untuk baris lama. `DEFAULT 'image/jpeg'` membuat baris
+    // yang sudah ada tetap benar tanpa backfill.
+    sql: `
+      ALTER TABLE photos ADD COLUMN content_type TEXT NOT NULL DEFAULT 'image/jpeg';
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

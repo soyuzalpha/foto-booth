@@ -41,7 +41,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **4** | Kiosk mode (fullscreen, PIN, idle reset) | M | `[x]` **selesai** |
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[x]` **selesai** |
 | 6 | Green screen + adjustments + face enhance | L | `[x]` **selesai** — 19/19 e2e; GFPGAN ~340 MB belum diunggah |
-| 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[ ]` |
+| 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[x]` **selesai** — 138 tes mesin video; model RIFE belum diunggah |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
 | 9 | Leads + analytics + branding | M | `[~]` **inti Leads+Analytics selesai** — branding/sharing/auto-print ditunda |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
@@ -582,9 +582,100 @@ operator saat siap (tidak ikut git).
 
 ---
 
+## Fase 7 — Video + slow-mo (WebCodecs + RIFE)
+
+**Status:** `[x]` selesai & tervalidasi lokal (2026-10-14)
+**Gate masuk:** Fase 6 gate keluar terpenuhi (pipeline filter di perangkat sudah ada & teruji) — chroma key/rotasi terbukti lewat uji piksel nyata.
+**Tujuan:** tamu bisa membawa pulang **video**, bukan cuma foto: rekam langsung dari kamera (dengan audio), atau mengubah foto sesi jadi animasi (slideshow/boomerang), plus slow-mo yang benar-benar diretiming.
+
+**Prinsip (jangan dilanggar)**
+
+1. **Semua pengolahan di perangkat.** Rekaman, animasi, dan slow-mo dikerjakan di browser (`MediaRecorder`, canvas, `VideoEncoder`). Video tamu **tidak pernah lewat API** — API hanya menerima berkas yang sudah jadi di antrian upload yang sama dengan foto.
+2. **Satu sumber kebenaran untuk jenis media.** `maxBytesForContentType`, `mediaKindForContentType`, `mimeForExt`, `extForMime`, dan `UPLOAD_CONTENT_TYPES` tinggal di `packages/shared` — studio dan API **tidak** menghitung sendiri batas ukuran, ekstensi, atau jenis berkas.
+3. **Slow-mo = berkas yang benar-benar diretiming**, bukan berkas yang sama dengan metadata kecepatan. Sebagian pemutar ponsel mengabaikan `playbackRate`, jadi tamu akan menerima video yang berjalan normal.
+4. **Logika murni terpisah dari DOM.** Keputusan (format apa, berapa bitrate, urutan frame animasi, berapa frame sintetis) ditulis sebagai fungsi murni yang diuji **tanpa browser**; efek piksel/encoding dijalankan adapter DOM.
+5. **Kegagalan tidak menghilangkan video.** Slow-mo/animasi/poster yang gagal → klip aslinya tetap disimpan. `MediaRecorder` kosong **tidak pernah** masuk antrian.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Jenis media shared | `packages/shared/src/{constants,schemas,storage}.ts` (`VIDEO_MAX_BYTES`, `maxBytesForContentType`, `mediaKindForContentType`, `UPLOAD_CONTENT_TYPES`, `extForMime`/`mimeForExt`) |
+| Mesin video (murni) | `apps/studio/src/lib/video/{types,plan,codec,bitrate,animation,slowMotion,interpolation,naming}.ts` |
+| Mesin video (adapter) | `apps/studio/src/lib/video/{recorder,videoSession,sequenceRenderer,slowMotionRenderer,videoThumb,rife,videoSettingsStore}.ts` |
+| Jembatan UI | `apps/studio/src/lib/video/{useVideoSession,videoIntake}.ts` |
+| Capture ekstra | `apps/studio/src/lib/capture/captureSession.ts` (`stream()` untuk `MediaRecorder`) |
+| Arsip lokal | `apps/studio/src/lib/upload/localArchive.ts` (mp4/webm) |
+| API | `apps/api/src/db.ts` (migrasi 5 `photo-content-type`) · `routes/galleries.ts` (batas per jenis, tipe dari key) · `routes/gallery.ts` (kartu `<video>`, ZIP pakai `extForMime`) · `pages.ts` (CSS `.grid`) |
+| UI | `CapturePanel.tsx` (fieldset Video) · `locales/{id,en}.json` · `styles.css` |
+
+**Task**
+
+- [x] `types.ts`: resolusi 480/720/1080/2160 · fps 24/30/60 · slow-mo 1/½/¼ · quality preset · durasi maks · audio · animasi · `captureFpsFor()` — murni, teruji
+- [x] `plan.ts`: `resolveVideoPlan(settings, opts)` → mode, mime, bitrate, dimensi, captureFps, batas durasi + `describePlan`/`planIsRunnable` — murni, teruji
+- [x] `codec.ts`: daftar preferensi MIME (mp4→webm), `pickMimeType` dengan `isTypeSupported`, ekstensi & tipe konten — murni, teruji
+- [x] `bitrate.ts`: estimasi bitrate per resolusi/fps/kualitas + bitrate audio + penjepitan min/maks — murni, teruji
+- [x] `animation.ts`: urutan slideshow & boomerang, langkah waktu, durasi, pengulangan ke target — murni, teruji
+- [x] `slowMotion.ts`: durasi keluaran, jumlah frame, `retimeTimeline` → langkah retiming — murni, teruji
+- [x] `interpolation.ts`: `syntheticFrames` + `blendWeight` + `interpolateFrames` (pencampuran berbobot) — murni, teruji
+- [x] `naming.ts`: nama berkas rekaman & animasi (`video-N.mp4`, `boomerang-…`) — murni, teruji
+- [x] `recorder.ts`: `createVideoRecorder` di atas `MediaRecorder` (mimeType tak dikenal ditolak → fallback) + `browserRecorderDeps`
+- [x] `videoSession.ts`: satu sesi rekam — `start`/`stop` → `VideoClip`, `clipHasContent` — teruji
+- [x] `sequenceRenderer.ts`: `renderAnimation` (slideshow/boomerang) ke `MediaRecorder` dari `StreamableCanvas` + `containRect`/`drawFrame` — teruji
+- [x] `slowMotionRenderer.ts`: retiming klip jadi berkas baru (bukan playback lambat) via `planSlowMo`/`renderSlowMotion` — teruji
+- [x] `rife.ts`: interpolator RIFE (`rife.onnx`) + fallback pencampuran; **model dicek sebelum runtime ONNX (~14 MB) dimuat** — teruji
+- [x] `videoThumb.ts`: poster dari `<video>`+`canvas`, **seek ke waktu > 0**, pendengar `seeked` dipasang sebelum `currentTime`, penantian berbatas waktu — murni + teruji
+- [x] `videoSettingsStore.ts`: baca/tulis/normalisasi setelan video di localStorage (nilai rusak → default) — teruji
+- [x] `useVideoSession.ts`: hook React ↔ mesin video (setelan persist, satu rekam sekaligus, batas durasi timer, slow-mo setelah rekam, klip → `onClip`)
+- [x] `videoIntake.ts`: `clipToIntake` (klip tanpa byte **tidak pernah** masuk antrian) + `decodeFrames` + `describeClip` — teruji
+- [x] `captureSession.ts`: aksesor `stream()` untuk `MediaRecorder`
+- [x] `localArchive.ts`: ekstensi mp4/webm supaya klip tidak ditulis `.jpg`
+- [x] Migrasi DB 5 `photo-content-type` (`ALTER TABLE photos ADD COLUMN content_type … DEFAULT 'image/jpeg'`) — baris lama tetap benar tanpa backfill
+- [x] API: batas ukuran per jenis (`maxBytesForContentType`), tipe konten **diturunkan dari ekstensi key yang dibuat server** (klien tidak bisa mengaku), halaman tamu render `<video preload="metadata">` untuk video, ZIP pakai `extForMime`
+- [x] Wiring UI: fieldset **Video** di `CapturePanel` (resolusi, fps, durasi, slow-mo, quality, audio, animasi, lama tiap foto, rekam/hentikan, buat animasi, reset, daftar klip sesi)
+- [x] i18n `id` + `en` untuk semua label baru
+- [x] Tes unit untuk **setiap** modul murni di atas + adapter (138 tes di `src/lib/video/`)
+
+**Kriteria terima (FEATURE-MATRIX):** §B semua baris dengan **Fase = 7** (8 baris: #13 snapshot/slow-mo · #14 resolusi+frame rate+max duration · #15 slow-mo factor ½/¼ · #16 output FPS 24/30/60 · #17 output quality 480/720/1080/2160 · #18 rekam audio · #20 animasi slideshow/boomerang · #31 AI slow-motion RIFE)
+
+**Validasi**
+
+```bash
+pnpm lint && pnpm -r typecheck && pnpm -r build
+pnpm test
+
+# mesin video saja (murni + adapter, tanpa browser)
+cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
+```
+
+- [x] **Format dipilih dari dukungan nyata browser**, bukan diasumsikan: `pickMimeType` mencoba daftar preferensi lewat `MediaRecorder.isTypeSupported` dan jatuh ke webm bila mp4 ditolak
+- [x] **Resolusi/fps/quality/durasi mengalir ke rencana**: `resolveVideoPlan` mengubah setelan jadi `{mimeType, bitrateBps, width, height, captureFps, maxDurationSec}` — teruji per kombinasi
+- [x] **Slow-mo benar-benar diretiming**: `retimeTimeline` + `outputFrameCount`/`outputDurationSec` menghasilkan durasi & jumlah frame baru (½ → 2× frame, ¼ → 4×) — teruji angka, bukan asumsi
+- [x] **Slow-mo gagal → klip asli tetap dikirim** (bukan hilang)
+- [x] **Animasi slideshow/boomerang**: urutan frame boomerang bolak-balik, slideshow maju; `buildAnimation` menghitung langkah + durasi; kurang dari 2 foto → tombol nonaktif & hook menolak
+- [x] **Poster video tidak mengambil frame pembuka**: `thumbSeekTime` > 0 dan pendengar `seeked` dipasang sebelum `currentTime` diubah (tes fake elemen memicu event nyata)
+- [x] **Klip tanpa byte tidak pernah masuk antrian** (`clipToIntake` → `null`), dan tipe konten tak dikenal juga ditolak
+- [x] **RIFE**: model dicek **sebelum** runtime ONNX ~14 MB dimuat — kiosk tanpa model tidak membuang unduhan; interpolator jatuh ke pencampuran berbobot bila model tak ada
+- [x] **Batas ukuran per jenis**: `maxBytesForContentType("video/mp4") = 200 MB` vs foto `25 MB` — API menolak dengan pesan yang menyebut batas & tipe
+- [x] **Tipe konten tidak bisa dipalsukan klien**: diturunkan dari ekstensi key objek yang dibuat server; key di luar album tetap ditolak
+- [x] **Halaman galeri tamu bisa menampilkan video**: kartu grid render `<video preload="metadata" muted playsinline>` untuk MIME video, `<img ?thumb=1>` untuk foto
+- [x] **ZIP tidak lagi menamai video `.jpg`**: `extFromContentType` memakai `extForMime` shared
+- [x] **Baris foto lama tetap benar** setelah migrasi: `content_type` default `image/jpeg` di SQL **dan** di pembaca baris
+- [x] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · retiming slow-mo terbukti lewat angka (durasi & jumlah frame), bukan exit code · kegagalan slow-mo/animasi terbukti tidak menghilangkan klip · batas ukuran & tipe konten terbukti di sisi API · bukti ditulis.
+
+**Bukti:** mesin video `src/lib/video/` **138 tes hijau** (`node --test src/lib/video/*.test.ts`), termasuk: `pickMimeType` memilih mp4 bila didukung & jatuh ke webm bila tidak, `resolveVideoPlan` menghasilkan bitrate/dimensi/captureFps per kombinasi resolusi×fps×quality, `retimeTimeline` ½ → durasi 2× & frame 2×, boomerang urutannya bolak-balik, `thumbSeekTime` > 0, `clipToIntake` menolak klip kosong & MIME tak dikenal, `readVideoSettings` nilai rusak → default, `makeVideoThumb` tetap menggambar walau `seeked` tak pernah datang. Gate suite penuh: `pnpm test` **1066 tes hijau** (shared 107 · api 119 · studio 840) · `pnpm typecheck` 0 · `pnpm lint` 0 · `pnpm build` 0. Migrasi 5 menambahkan `content_type` dengan default `image/jpeg`; API menurunkan tipe dari ekstensi key objek dan menolak berkas di atas batas per jenis (video 200 MB / foto 25 MB).
+
+**Ditunda (bukan blocker):** model RIFE `rife.onnx` **tidak ikut git** — jalur inferensinya sudah ada dan divalidasi dengan interpolator pencampuran sebagai fallback; berkas model diunggah operator ke `$STORAGE_DIR/models/` saat siap (sama polanya dengan GFPGAN Fase 6).
+
+**Gate keluar Fase 7 → Fase 8:** `[x]` terpenuhi — mesin video jalan end-to-end (rekam → klip → antrian upload yang sama dengan foto), slow-mo & animasi terbukti, dan API/galeri sudah mengenal video.
+
+---
+
 ## Fase 9 — Leads + analytics + branding
 
-**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena Fase 7–8 belum jalan, dan bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
+**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena Fase 8 belum jalan, dan bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
 **Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 8 belum jalan. Yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada video/AI: menangkap data tamu + menghitungnya.
 **Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu.
 

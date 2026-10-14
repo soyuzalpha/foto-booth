@@ -193,6 +193,11 @@ export interface PhotoRow {
   height: number;
   bytes: number;
   filename?: string | undefined;
+  /**
+   * MIME objek. Opsional supaya pemanggil lama (dan tes lama) tetap jalan —
+   * absen = `image/jpeg`, sama dengan default kolomnya.
+   */
+  contentType?: string | undefined;
 }
 
 /**
@@ -202,8 +207,8 @@ export interface PhotoRow {
  */
 export function insertPhoto(db: Db, id: string, row: PhotoRow, createdAt: string): void {
   db.prepare(
-    `INSERT OR REPLACE INTO photos (id, gallery_id, key, thumb_key, width, height, bytes, filename, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO photos (id, gallery_id, key, thumb_key, width, height, bytes, filename, content_type, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     row.galleryId,
@@ -213,6 +218,7 @@ export function insertPhoto(db: Db, id: string, row: PhotoRow, createdAt: string
     row.height,
     row.bytes,
     row.filename ?? null,
+    row.contentType ?? "image/jpeg",
     createdAt,
   );
 }
@@ -235,6 +241,9 @@ function toPhoto(raw: Record<string, unknown>): PhotoRecord {
     thumbUrl: "",
     width: num(raw.width),
     height: num(raw.height),
+    // Baris pra-migrasi-5 tidak punya kolom ini sama sekali (`undefined`), jadi
+    // defaultnya di sini juga — bukan cuma di SQL.
+    contentType: raw.content_type === undefined || raw.content_type === null ? "image/jpeg" : str(raw.content_type),
     createdAt: str(raw.created_at),
   };
 }

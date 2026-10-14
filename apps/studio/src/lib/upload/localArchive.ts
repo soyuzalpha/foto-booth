@@ -38,10 +38,18 @@ export interface ArchiveEntry {
   bytes: number;
 }
 
-/** Ekstensi dari MIME — sengaja cermin `extForMime` shared, tanpa impor. */
+/**
+ * Ekstensi dari MIME — sengaja cermin `extForMime` shared, tanpa impor.
+ *
+ * Video ikut di sini sejak Fase 7: tanpa baris mp4/webm, klip hasil rekaman
+ * ditulis ke arsip lokal dengan nama `.jpg` — berkasnya benar, tapi operator
+ * tidak bisa membukanya dari file manager.
+ */
 function extensionFor(contentType: string): string {
   if (contentType === "image/png") return "png";
   if (contentType === "image/webp") return "webp";
+  if (contentType === "video/mp4") return "mp4";
+  if (contentType === "video/webm") return "webm";
   return "jpg";
 }
 

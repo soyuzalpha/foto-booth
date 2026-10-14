@@ -28,7 +28,11 @@ export interface FakeCanvas extends FilterCanvas, FakePixels {
   filtersUsed: string[];
   /** Berapa kali `drawImage` dipanggil. */
   draws: number;
-  context: Filter2DContext;
+  /**
+   * Konteks asli + `globalAlpha`: fake ini benar-benar menerapkan alpha saat
+   * mengomposit, jadi kode yang menumpuk gambar berbobot bisa diuji.
+   */
+  context: Filter2DContext & { globalAlpha: number };
 }
 
 export interface FakeCanvasOptions {
@@ -83,12 +87,18 @@ export function createFakeCanvas(
     pixels,
     filtersUsed,
     draws: 0,
-    context: undefined as unknown as Filter2DContext,
-    getContext: () => context as unknown as Filter2DContext,
+    context: undefined as unknown as Filter2DContext & { globalAlpha: number },
+    getContext: () => context as unknown as Filter2DContext & { globalAlpha: number },
   };
 
   const context = {
     fillStyle: "#000000",
+    /**
+     * `globalAlpha` ikut diterapkan di `drawImage` supaya kode yang menumpuk
+     * gambar dengan bobot (mis. interpolasi pencampuran slow-mo) benar-benar
+     * bisa diuji — bukan sekadar dicatat. Default 1 = tidak mengubah apa pun.
+     */
+    globalAlpha: 1,
     save() {},
     restore() {},
     setTransform(a: number, b: number, c: number, d: number, e: number, f: number) {
@@ -119,7 +129,7 @@ export function createFakeCanvas(
     putImageData(image: FilterImageData) {
       pixels.set(image.data.subarray(0, pixels.length));
     },
-    drawImage(image: unknown, dx: number, dy: number) {
+    drawImage(image: unknown, dx: number, dy: number, dw?: number, dh?: number) {
       canvas.draws += 1;
       filtersUsed.push(filterValue);
 
@@ -130,18 +140,29 @@ export function createFakeCanvas(
       const det = a * d - b * c;
       if (det === 0) return;
 
+      // Bentuk 5-argumen (`drawImage(img, dx, dy, dw, dh)`) menskalakan sumber
+      // ke kotak tujuan; tanpa itu sumber digambar 1:1.
+      const outW = dw ?? src.width;
+      const outH = dh ?? src.height;
+      if (outW <= 0 || outH <= 0) return;
+      const scaleX = src.width / outW;
+      const scaleY = src.height / outH;
+
       for (let y = 0; y < canvas.height; y += 1) {
         for (let x = 0; x < canvas.width; x += 1) {
           const px = x + 0.5 - e;
           const py = y + 0.5 - f;
-          // Balik matriks: titik kanvas → titik gambar sumber.
-          const sx = Math.floor((d * px - c * py) / det - dx);
-          const sy = Math.floor((-b * px + a * py) / det - dy);
-          if (sx < 0 || sy < 0 || sx >= src.width || sy >= src.height) continue;
+          // Balik matriks: titik kanvas → titik ruang-tujuan `drawImage`.
+          const lx = (d * px - c * py) / det - dx;
+          const ly = (-b * px + a * py) / det - dy;
+          if (lx < 0 || ly < 0 || lx >= outW || ly >= outH) continue;
+
+          const sx = Math.min(src.width - 1, Math.floor(lx * scaleX));
+          const sy = Math.min(src.height - 1, Math.floor(ly * scaleY));
 
           const si = (sy * src.width + sx) * 4;
           const di = (y * canvas.width + x) * 4;
-          const sa = (src.pixels[si + 3] ?? 0) / 255;
+          const sa = ((src.pixels[si + 3] ?? 0) / 255) * context.globalAlpha;
           if (sa === 0) continue;
 
           pixels[di] = (src.pixels[si] ?? 0) * sa + (pixels[di] ?? 0) * (1 - sa);
@@ -165,7 +186,7 @@ export function createFakeCanvas(
     configurable: true,
   });
 
-  canvas.context = context as unknown as Filter2DContext;
+  canvas.context = context as unknown as Filter2DContext & { globalAlpha: number };
   canvas.convertToBlob = async () => new Blob([pixels.slice().buffer], { type: "image/jpeg" });
 
   return canvas;

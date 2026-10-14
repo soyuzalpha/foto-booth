@@ -27,6 +27,8 @@ import {
   LEAD_CONSENT_TEXT,
   UnlockGallerySchema,
   activeFieldsFor,
+  extForMime,
+  mediaKindForContentType,
   type Gallery,
   type LeadField,
 } from "@foto-booth/shared";
@@ -227,10 +229,17 @@ function sanitizeFolder(name: string): string {
   return cleaned === "" ? "galeri" : cleaned;
 }
 
+/**
+ * Ekstensi berkas di dalam ZIP.
+ *
+ * Dipakai `extForMime` dari `@foto-booth/shared` — satu tabel yang sama dengan
+ * yang menentukan key objek. Daftar lokal di sini dulu hanya tahu png/webp/jpg,
+ * jadi video yang diunduh tamu berubah nama jadi `.jpg` (berkasnya benar, tapi
+ * tidak bisa dibuka dari file manager).
+ */
 function extFromContentType(contentType: string): string {
-  if (contentType.includes("png")) return "png";
-  if (contentType.includes("webp")) return "webp";
-  return "jpg";
+  const ext = extForMime(contentType);
+  return ext === "bin" ? "jpg" : ext;
 }
 
 /* ---- Rute --------------------------------------------------------- */
@@ -286,11 +295,18 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
       ].join("\n");
 
       const cards = photos
-        .map(
-          (photo) =>
-            `<a href="${escapeHtml(`${base}/photo/${photo.id}`)}" target="_blank" rel="noopener">` +
-            `<img src="${escapeHtml(`${base}/photo/${photo.id}?thumb=1`)}" alt="" loading="lazy"></a>`,
-        )
+        .map((photo) => {
+          const href = `${base}/photo/${photo.id}`;
+          const src = `${base}/photo/${photo.id}?thumb=1`;
+          // Video tidak bisa dipakai sebagai `<img>` — halaman akan menampilkan
+          // kotak rusak. `preload="metadata"` cuma mengambil header (moov atom),
+          // jadi grid 20 video tidak mengunduh 20 berkas penuh.
+          const media =
+            mediaKindForContentType(photo.contentType) === "video"
+              ? `<video src="${escapeHtml(src)}" preload="metadata" muted playsinline></video>`
+              : `<img src="${escapeHtml(src)}" alt="" loading="lazy">`;
+          return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${media}</a>`;
+        })
         .join("");
 
       const body = `

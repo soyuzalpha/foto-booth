@@ -6,7 +6,7 @@
  * (kapan boleh jepret, berapa kali retry, kapan berhenti) ada di state machine.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ASPECT_RATIOS } from "../lib/capture/aspectRatio.ts";
@@ -22,6 +22,19 @@ import type { CaptureErrorCode } from "../lib/transports/errors.ts";
 import { framesToIntake } from "../lib/upload/composedToIntake.ts";
 import { makeThumb } from "../lib/upload/makeThumb.ts";
 import { useCaptureSession } from "../lib/useCaptureSession.ts";
+import {
+  SLIDESHOW_FRAME_MS_LIMITS,
+  SLOW_MO_FACTORS,
+  VIDEO_FPS_OPTIONS,
+  VIDEO_MAX_DURATION_LIMITS,
+  VIDEO_RESOLUTIONS,
+  type SlowMoFactor,
+  type VideoAnimationKind,
+  type VideoFps,
+  type VideoQualityId,
+  type VideoResolutionId,
+} from "../lib/video/types.ts";
+import { useVideoSession } from "../lib/video/useVideoSession.ts";
 
 /** Nama state di UI. Semua nilai harus ada — kalau state baru ditambah, ini ikut ketahuan. */
 const STATE_LABEL: Record<string, string> = {
@@ -69,6 +82,29 @@ const BACKGROUND_OPTIONS: readonly { id: BackgroundMode; label: string }[] = [
   { id: "ai", label: "capture.bgAi" },
 ];
 
+/** Pilihan setelan video — daftar, bukan angka bebas, sama alasannya dengan sesi foto. */
+const VIDEO_DURATION_OPTIONS = [5, 10, 15, 30, 45, 60];
+const SLIDESHOW_FRAME_OPTIONS = [300, 500, 700, 900, 1200, 2000, 3000];
+
+const VIDEO_QUALITY_OPTIONS: readonly { id: VideoQualityId; label: string }[] = [
+  { id: "hemat", label: "capture.videoQualityHemat" },
+  { id: "standar", label: "capture.videoQualityStandar" },
+  { id: "maks", label: "capture.videoQualityMaks" },
+];
+
+const VIDEO_ANIMATION_OPTIONS: readonly { id: VideoAnimationKind; label: string }[] = [
+  { id: "none", label: "capture.videoAnimNone" },
+  { id: "slideshow", label: "capture.videoAnimSlideshow" },
+  { id: "boomerang", label: "capture.videoAnimBoomerang" },
+];
+
+/** Label faktor slow-mo. `1` = normal, jadi tombolnya tidak berbunyi "1×". */
+const SLOW_MO_LABELS: Record<SlowMoFactor, string> = {
+  1: "capture.videoSlowMoNormal",
+  0.5: "capture.videoSlowMoHalf",
+  0.25: "capture.videoSlowMoQuarter",
+};
+
 function withCurrent(options: readonly number[], current: number): number[] {
   return options.includes(current) ? [...options] : [...options, current].sort((a, b) => a - b);
 }
@@ -99,6 +135,47 @@ export default function CapturePanel(): React.JSX.Element {
   // fotonya tersimpan atau tidak.
   const [savedNote, setSavedNote] = useState<string | null>(null);
 
+  // Video (Fase 7). Sumbernya sama dengan foto: stream kamera yang sedang
+  // tersambung dan frame sesi yang sudah dijepret (bahan animasi).
+  //
+  // Daftar blob di-memo: `session.frames()` membangun array baru tiap panggilan,
+  // dan identitas yang berubah tiap render akan membuat rencana rekaman
+  // dihitung ulang terus — plus membatalkan `useCallback` di hook.
+  const videoFrames = useMemo(
+    () => (session?.frames() ?? []).map((frame) => frame.blob),
+    // `frames` tidak dibaca di dalam badan memo, tapi identitasnya berubah tiap
+    // slot sesi berubah — itu satu-satunya penanda bahwa `session.frames()`
+    // perlu dibaca ulang. Pola yang sama dipakai `useCaptureSession`.
+    [session, frames], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const video = useVideoSession({
+    stream: session?.stream() ?? null,
+    frames: videoFrames,
+    onClip: async (photo) => {
+      const summary = await intake([photo]);
+      if (summary.error !== null) {
+        setSavedNote(t("capture.saveFailed", { message: summary.error }));
+      } else {
+        setSavedNote(t("capture.saved", { count: summary.queued }));
+      }
+    },
+  });
+
+  // Penghitung durasi rekaman — hanya hidup selama merekam.
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  useEffect(() => {
+    if (!video.recording) {
+      setRecordSeconds(0);
+      return;
+    }
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      setRecordSeconds(Math.round((Date.now() - started) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [video.recording]);
+
   const holderRef = useRef<HTMLDivElement>(null);
   const deviceId = state?.deviceId ?? null;
 
@@ -107,15 +184,15 @@ export default function CapturePanel(): React.JSX.Element {
     const holder = holderRef.current;
     if (holder === null || session === null) return;
 
-    const video = session.videoElement();
-    if (video === null) return;
+    const element = session.videoElement();
+    if (element === null) return;
 
-    if (video.parentElement !== holder) {
-      holder.replaceChildren(video);
+    if (element.parentElement !== holder) {
+      holder.replaceChildren(element);
     }
 
-    video.className = "preview-video";
-    void video.play().catch(() => undefined);
+    element.className = "preview-video";
+    void element.play().catch(() => undefined);
   }, [session, deviceId]);
 
   const currentState = state?.state ?? "idle";
@@ -657,6 +734,247 @@ export default function CapturePanel(): React.JSX.Element {
         </div>
 
         <p className="muted small">{t("capture.filterHint")}</p>
+      </fieldset>
+
+      {/* ── video (§B13–§B20: rekam, resolusi/fps/durasi, slow-mo, audio, animasi) ── */}
+      <fieldset className="settings settings-wide" data-testid="capture-video">
+        <legend>{t("capture.video")}</legend>
+
+        <label className="field">
+          <span>{t("capture.videoResolution")}</span>
+          <select
+            value={video.settings.resolution}
+            data-testid="video-resolution"
+            onChange={(event) => video.update({ resolution: event.target.value as VideoResolutionId })}
+          >
+            {VIDEO_RESOLUTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoFps")}</span>
+          <select
+            value={String(video.settings.fps)}
+            data-testid="video-fps"
+            onChange={(event) => video.update({ fps: Number(event.target.value) as VideoFps })}
+          >
+            {VIDEO_FPS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {t("capture.videoFpsValue", { value })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoDuration")}</span>
+          <select
+            value={String(video.settings.maxDurationSec)}
+            data-testid="video-duration"
+            onChange={(event) => video.update({ maxDurationSec: Number(event.target.value) })}
+          >
+            {withCurrent(
+              VIDEO_DURATION_OPTIONS.filter(
+                (value) =>
+                  value >= VIDEO_MAX_DURATION_LIMITS.min && value <= VIDEO_MAX_DURATION_LIMITS.max,
+              ),
+              video.settings.maxDurationSec,
+            ).map((value) => (
+              <option key={value} value={value}>
+                {t("capture.secondsShort", { value })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoSlowMo")}</span>
+          <select
+            value={String(video.settings.slowMo)}
+            data-testid="video-slowmo"
+            onChange={(event) => video.update({ slowMo: Number(event.target.value) as SlowMoFactor })}
+          >
+            {SLOW_MO_FACTORS.map((value) => (
+              <option key={value} value={value}>
+                {t(SLOW_MO_LABELS[value])}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoQuality")}</span>
+          <select
+            value={video.settings.quality}
+            data-testid="video-quality"
+            onChange={(event) => video.update({ quality: event.target.value as VideoQualityId })}
+          >
+            {VIDEO_QUALITY_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {t(option.label)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={video.settings.audio}
+            data-testid="video-audio"
+            onChange={(event) => video.update({ audio: event.target.checked })}
+          />
+          <span>{t("capture.videoAudio")}</span>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoAnimation")}</span>
+          <select
+            value={video.settings.animation}
+            data-testid="video-animation"
+            onChange={(event) =>
+              video.update({ animation: event.target.value as VideoAnimationKind })
+            }
+          >
+            {VIDEO_ANIMATION_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {t(option.label)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.videoFrameMs")}</span>
+          <select
+            value={String(video.settings.slideshowFrameMs)}
+            disabled={video.settings.animation === "none"}
+            data-testid="video-frame-ms"
+            onChange={(event) => video.update({ slideshowFrameMs: Number(event.target.value) })}
+          >
+            {withCurrent(
+              SLIDESHOW_FRAME_OPTIONS.filter(
+                (value) =>
+                  value >= SLIDESHOW_FRAME_MS_LIMITS.min && value <= SLIDESHOW_FRAME_MS_LIMITS.max,
+              ),
+              video.settings.slideshowFrameMs,
+            ).map((value) => (
+              <option key={value} value={value}>
+                {t("capture.secondsShort", { value: value / 1000 })}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="field-row">
+          {video.recording ? (
+            <button
+              className="btn"
+              type="button"
+              data-testid="video-stop"
+              disabled={video.busy}
+              onClick={() => void video.stopRecording()}
+            >
+              {t("capture.videoStop")}
+            </button>
+          ) : (
+            <button
+              className="btn"
+              type="button"
+              data-testid="video-record"
+              disabled={!video.canRecord || video.busy}
+              onClick={video.startRecording}
+            >
+              {t("capture.videoRecord")}
+            </button>
+          )}
+
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            data-testid="video-animate"
+            disabled={video.busy || frames.length < 2 || video.settings.animation === "none"}
+            onClick={() => void video.renderAnimationClip()}
+          >
+            {t("capture.videoRender")}
+          </button>
+
+          <button className="btn btn-ghost btn-small" type="button" onClick={video.reset}>
+            {t("capture.videoReset")}
+          </button>
+        </div>
+
+        {video.recording && (
+          <p className="banner" role="status" data-testid="video-recording">
+            {t("capture.videoRecording", { seconds: recordSeconds })}
+          </p>
+        )}
+
+        {video.plan === null ? (
+          <p className="muted small" data-testid="video-unsupported">
+            {t("capture.videoNoSupport")}
+          </p>
+        ) : (
+          <p className="muted small" data-testid="video-plan">
+            {t("capture.videoPlan", { summary: video.summary ?? "" })}
+          </p>
+        )}
+
+        {!video.canRecord && video.plan !== null && (
+          <p className="muted small" data-testid="video-no-stream">
+            {t("capture.videoNoStream")}
+          </p>
+        )}
+
+        {video.busy && <p className="banner banner-warn">{t("capture.videoBusy")}</p>}
+
+        {video.error !== null && (
+          <p className="banner banner-error" role="status" data-testid="video-error">
+            {video.error}
+          </p>
+        )}
+
+        <p className="muted small">{t("capture.videoHint")}</p>
+
+        {/* Klip sesi ini. Tamu harus bisa melihat hasilnya sebelum pulang —
+            sama seperti grid foto di bawah, tapi klip perlu diputar. */}
+        <div className="video-clips" data-testid="video-clips">
+          <div className="field-row">
+            <span className="muted small">{t("capture.videoClips")}</span>
+            {video.clips.length > 0 && (
+              <button
+                className="link"
+                type="button"
+                data-testid="video-clear"
+                onClick={video.clearClips}
+              >
+                {t("capture.videoClear")}
+              </button>
+            )}
+          </div>
+
+          {video.clips.length === 0 ? (
+            <p className="muted small" data-testid="video-clips-empty">
+              {t("capture.videoClipEmpty")}
+            </p>
+          ) : (
+            <div className="frames">
+              {video.clips.map((clip) => (
+                <figure key={clip.id} className="shot">
+                  <video src={clip.url} controls muted playsInline preload="metadata" />
+                  <figcaption>
+                    <span>{clip.filename}</span>
+                    <span className="muted">{clip.summary}</span>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </div>
       </fieldset>
 
       {/* ── hasil ── */}

@@ -48,6 +48,12 @@ export const PhotoSchema = z.object({
   thumbUrl: z.string(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  /**
+   * MIME objek. Default `image/jpeg` supaya baris lama (dan klien lama yang
+   * belum mengirim field ini) tetap lolos parse — bukan galat yang harus
+   * ditangani operator.
+   */
+  contentType: z.string().default("image/jpeg"),
   createdAt: z.string(),
 });
 export type Photo = z.infer<typeof PhotoSchema>;
@@ -194,8 +200,25 @@ export type ContentItem = z.infer<typeof ContentItemSchema>;
  * menulis ke prefix album orang lain.
  * ------------------------------------------------------------------ */
 
-export const UPLOAD_CONTENT_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const UPLOAD_CONTENT_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+] as const;
 export type UploadContentType = (typeof UPLOAD_CONTENT_TYPES)[number];
+
+/**
+ * Jenis media dari MIME.
+ *
+ * Dipakai halaman galeri & ZIP: `<img>` untuk foto, `<video controls>` untuk
+ * video. Menebak dari ekstensi key akan salah begitu ada key lama — MIME adalah
+ * satu-satunya sumber yang benar, dan ia sudah ikut tersimpan bersama objeknya.
+ */
+export function mediaKindForContentType(contentType: string): "photo" | "video" {
+  return contentType.startsWith("video/") ? "video" : "photo";
+}
 
 export const UploadUrlRequestSchema = z.object({
   contentType: z.enum(UPLOAD_CONTENT_TYPES),

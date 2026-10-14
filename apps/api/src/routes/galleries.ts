@@ -19,12 +19,13 @@ import {
   CreateEventSchema,
   CreateGallerySchema,
   GALLERY_TTL_DAYS,
-  PHOTO_MAX_BYTES,
   RegisterPhotoSchema,
   UPLOAD_URL_TTL_SECONDS,
   UploadUrlRequestSchema,
   albumPrefixes,
   keyBelongsToAlbum,
+  maxBytesForContentType,
+  mimeForExt,
   photoKey,
   thumbKey,
   type CreateGallery,
@@ -55,6 +56,22 @@ import {
 
 const INVALID = (message: string) => ({ error: "invalid_request", message, statusCode: 400 });
 const NOT_FOUND = (message: string) => ({ error: "not_found", message, statusCode: 404 });
+
+/**
+ * Tipe konten dari ekstensi key objek.
+ *
+ * Dipakai waktu studio mendaftarkan berkas yang sudah diupload. Key-nya dibuat
+ * server (`photoKey`), jadi ekstensinya mencerminkan tipe yang benar-benar
+ * ditandatangani — bukan yang diklaim klien. Ekstensi tak dikenal jatuh ke
+ * `image/jpeg`: itu perilaku lama untuk foto sebelum kolom `content_type` ada,
+ * dan halaman galeri memperlakukannya sebagai gambar.
+ */
+function contentTypeForStoredKey(key: string): string {
+  const dot = key.lastIndexOf(".");
+  if (dot < 0) return "image/jpeg";
+  const mime = mimeForExt(key.slice(dot + 1));
+  return mime === "application/octet-stream" ? "image/jpeg" : mime;
+}
 
 function badGateway(error: unknown) {
   const detail = error instanceof ObjectStoreError ? error.message : "penandatanganan URL gagal";
@@ -196,10 +213,14 @@ export async function galleryOperatorRoutes(app: FastifyInstance, ctx: ServerCon
     if (!parsed.success) return reply.status(400).send(INVALID(parsed.error.issues[0]?.message ?? "body tidak valid"));
 
     const { contentType, bytes } = parsed.data;
-    if (bytes > PHOTO_MAX_BYTES) {
+    // Batas ukuran mengikuti jenis berkas: video boleh jauh lebih besar
+    // daripada foto. Satu fungsi bersama dipakai supaya studio & API tidak
+    // pernah menghitung sendiri-sendiri.
+    const limit = maxBytesForContentType(contentType);
+    if (bytes > limit) {
       return reply.status(413).send({
         error: "photo_too_large",
-        message: `foto ${bytes} byte melebihi batas ${PHOTO_MAX_BYTES} byte`,
+        message: `berkas ${bytes} byte melebihi batas ${limit} byte untuk ${contentType}`,
         statusCode: 413,
       });
     }
@@ -247,15 +268,21 @@ export async function galleryOperatorRoutes(app: FastifyInstance, ctx: ServerCon
     if (!keyBelongsToAlbum(photo.key, gallery.hash) || !keyBelongsToAlbum(photo.thumbKey, gallery.hash)) {
       return reply.status(400).send(INVALID("key tidak termasuk album ini"));
     }
-    if (photo.bytes > PHOTO_MAX_BYTES) {
+
+    // Tipe konten diturunkan dari ekstensi key, **bukan** dari klien. Key-nya
+    // dibuat server waktu menandatangani URL, jadi ekstensinya otoritatif:
+    // klien tidak bisa mendaftarkan berkas sebagai video hanya dengan mengaku.
+    const contentType = contentTypeForStoredKey(photo.key);
+    const limit = maxBytesForContentType(contentType);
+    if (photo.bytes > limit) {
       return reply.status(413).send({
         error: "photo_too_large",
-        message: `foto ${photo.bytes} byte melebihi batas ${PHOTO_MAX_BYTES} byte`,
+        message: `berkas ${photo.bytes} byte melebihi batas ${limit} byte untuk ${contentType}`,
         statusCode: 413,
       });
     }
 
-    insertPhoto(ctx.db, photo.photoId, { ...photo, galleryId: gallery.id }, ctx.now().toISOString());
+    insertPhoto(ctx.db, photo.photoId, { ...photo, galleryId: gallery.id, contentType }, ctx.now().toISOString());
     const stored = listPhotos(ctx.db, gallery.id).find((row) => row.id === photo.photoId);
 
     return reply.status(201).send({
