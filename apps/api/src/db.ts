@@ -219,6 +219,43 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE photos ADD COLUMN content_type TEXT NOT NULL DEFAULT 'image/jpeg';
     `,
   },
+  {
+    id: 6,
+    name: "branding-guestbook",
+    // Fase 9 (sisa). Dua tabel dengan bentuk yang sangat berbeda, sengaja:
+    //
+    //   · `app_settings` — satu baris JSON untuk branding. Sama seperti
+    //     `booking_settings`: bidang branding bisa bertambah tanpa migrasi
+    //     baru, dan membacanya selalu satu baris. `id = 1` dipaksa CHECK supaya
+    //     tidak pernah ada dua baris setelan yang saling bertentangan.
+    //   · `guestbook_entries` — pesan video/audio tamu. `key` objek disimpan
+    //     apa adanya (dibangun `guestbookKey`, bukan dari label), dan `visible`
+    //     ada supaya operator bisa menyembunyikan pesan tanpa menghapus berkas
+    //     — menghapus karena alasan sesaat berarti tamu kehilangan ucapannya.
+    sql: `
+      CREATE TABLE app_settings (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        json       TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE guestbook_entries (
+        id               TEXT PRIMARY KEY,
+        event_id         TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        gallery_id       TEXT REFERENCES galleries(id) ON DELETE SET NULL,
+        kind             TEXT NOT NULL,
+        content_type     TEXT NOT NULL,
+        key              TEXT NOT NULL,
+        duration_seconds INTEGER NOT NULL,
+        bytes            INTEGER NOT NULL,
+        label            TEXT NOT NULL,
+        visible          INTEGER NOT NULL DEFAULT 1,
+        created_at       TEXT NOT NULL
+      );
+      CREATE INDEX idx_guestbook_event   ON guestbook_entries(event_id);
+      CREATE INDEX idx_guestbook_created ON guestbook_entries(created_at);
+    `,
+  },
 ];
 
 /** Handle minimal yang dipakai seluruh kode — memudahkan tes pakai `:memory:`. */

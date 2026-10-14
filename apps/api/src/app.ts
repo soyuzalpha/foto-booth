@@ -10,15 +10,18 @@ import { CONTENT_DIR, LANDING_DIR, STUDIO_DIST_DIR } from "./paths.ts";
 import type { ServerContext } from "./context.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { aiRoutes } from "./routes/ai.ts";
+import { brandingRoutes } from "./routes/branding.ts";
 import { bookingPageRoutes } from "./routes/booking-pages.ts";
 import { bookingRoutes } from "./routes/booking.ts";
 import { contentRoutes } from "./routes/content.ts";
 import { analyticsRoutes } from "./routes/analytics.ts";
 import { galleryRoutes } from "./routes/gallery.ts";
 import { galleryOperatorRoutes } from "./routes/galleries.ts";
+import { guestbookRoutes } from "./routes/guestbook.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { leadRoutes } from "./routes/leads.ts";
 import { modelRoutes } from "./routes/models.ts";
+import { shareRoutes } from "./routes/share.ts";
 import { scheduleTtlCleanup } from "./jobs/ttl.ts";
 
 /**
@@ -80,6 +83,18 @@ export async function buildApp(
   // Gemini milik operator sendiri. Didaftarkan setelah leads/analytics karena
   // tidak berbagi data dengan keduanya — urutannya hanya soal keterbacaan.
   await aiRoutes(app, ctx);
+
+  // Branding/white-label + video guestbook (Fase 9). Branding publik dibaca
+  // halaman galeri tamu; guestbook publik memakai hash galeri yang sama
+  // dengan galeri/leads. Didaftarkan setelah keduanya supaya jelas bahwa
+  // keduanya membaca data yang sama.
+  await brandingRoutes(app, ctx);
+  await guestbookRoutes(app, ctx);
+
+  // Halaman share publik (kartu preview link). Dibaca crawler WhatsApp/Telegram
+  // sebelum manusia membuka apa pun, dan memakai hash galeri yang sama dengan
+  // galeri/leads/guestbook — didaftarkan setelahnya supaya jelas sumber datanya.
+  await shareRoutes(app, ctx);
 
   // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.
   await modelRoutes(app);

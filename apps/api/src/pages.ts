@@ -80,6 +80,9 @@ ${head}
   h2 { margin:0 0 8px; font-size:20px; }
   .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:24px; }
   .note { font-size:13px; color:#555; margin:16px 0 0; }
+  /* Logo branding: tinggi tetap supaya logo apa pun (panjang/pendek) tidak
+     mengubah tinggi halaman secara liar antar-galeri. */
+  .logo { display:block; max-height:64px; width:auto; margin:0 0 16px; }
 </style>
 </head>
 <body><main class="card">${body}</main>${script}</body>

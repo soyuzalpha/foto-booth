@@ -5,11 +5,15 @@ import { APP_NAME, APP_VERSION, CONTENT_KINDS, LOCALES, type Locale } from "@fot
 
 import CapturePanel from "./components/CapturePanel.tsx";
 import BookingPanel from "./components/BookingPanel.tsx";
+import BrandingPanel from "./components/BrandingPanel.tsx";
 import DebugPanel from "./components/DebugPanel.tsx";
 import GalleryPanel from "./components/GalleryPanel.tsx";
+import GuestbookPanel from "./components/GuestbookPanel.tsx";
 import KioskOverlay from "./components/KioskOverlay.tsx";
 import KioskPanel from "./components/KioskPanel.tsx";
 import LeadsPanel from "./components/LeadsPanel.tsx";
+import PrintQueuePanel from "./components/PrintQueuePanel.tsx";
+import SharePanel from "./components/SharePanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
 import UploadStatusPanel from "./components/UploadStatusPanel.tsx";
 import { fetchHealth, type HealthResponse } from "./lib/api";
@@ -222,7 +226,9 @@ function StudioApp(): React.JSX.Element {
   const { t } = useTranslation();
   const online = useOnlineStatus();
   const { canInstall, install } = useInstallPrompt();
-  const [tab, setTab] = useState<"capture" | "template" | "gallery" | "booking" | "leads" | "kiosk">("capture");
+  const [tab, setTab] = useState<
+    "capture" | "template" | "gallery" | "booking" | "leads" | "kiosk" | "branding" | "share" | "guestbook" | "print"
+  >("capture");
   const kiosk = useKiosk();
 
   return (
@@ -309,6 +315,46 @@ function StudioApp(): React.JSX.Element {
           >
             {t("tabs.kiosk")}
           </button>
+          <button
+            className={`tab${tab === "branding" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "branding"}
+            data-testid="tab-branding"
+            onClick={() => setTab("branding")}
+          >
+            {t("tabs.branding")}
+          </button>
+          <button
+            className={`tab${tab === "share" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "share"}
+            data-testid="tab-share"
+            onClick={() => setTab("share")}
+          >
+            {t("tabs.share")}
+          </button>
+          <button
+            className={`tab${tab === "guestbook" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "guestbook"}
+            data-testid="tab-guestbook"
+            onClick={() => setTab("guestbook")}
+          >
+            {t("tabs.guestbook")}
+          </button>
+          <button
+            className={`tab${tab === "print" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "print"}
+            data-testid="tab-print"
+            onClick={() => setTab("print")}
+          >
+            {t("tabs.print")}
+          </button>
         </div>
 
         {tab === "capture" ? (
@@ -332,6 +378,14 @@ function StudioApp(): React.JSX.Element {
           <BookingPanel />
         ) : tab === "leads" ? (
           <LeadsPanel />
+        ) : tab === "branding" ? (
+          <BrandingPanel />
+        ) : tab === "share" ? (
+          <SharePanel />
+        ) : tab === "guestbook" ? (
+          <GuestbookPanel />
+        ) : tab === "print" ? (
+          <PrintQueuePanel />
         ) : (
           <KioskPanel kiosk={kiosk} />
         )}

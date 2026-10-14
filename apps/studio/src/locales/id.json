@@ -175,7 +175,11 @@
     "gallery": "Galeri & upload",
     "booking": "Booking & reservasi",
     "leads": "Leads & analytics",
-    "kiosk": "Mode kiosk"
+    "kiosk": "Mode kiosk",
+    "branding": "Branding",
+    "share": "Bagikan",
+    "guestbook": "Guestbook",
+    "print": "Antrean cetak"
   },
   "template": {
     "title": "Editor template",
@@ -506,6 +510,78 @@
     "consent": {
       "title": "Consent UU PDP",
       "note": "Kalimat ini ditampilkan ke tamu dan disimpan apa adanya bersama datanya, beserta versinya. Kalau kalimatnya berubah, data lama tetap bisa dibuktikan menyetujui versi yang mana."
+    }
+  },
+  "branding": {
+    "title": "Branding & white-label",
+    "signedOut": "Masuk sebagai operator dulu di tab Galeri — branding disimpan per akun, jadi butuh sesi.",
+    "loading": "Memuat",
+    "saving": "Menyimpan…",
+    "save": "Simpan branding",
+    "refresh": "Muat ulang",
+    "reset": "Kembalikan default",
+    "saved": "Branding tersimpan. Halaman tamu dan kartu share langsung memakainya.",
+    "preview": {
+      "title": "Pratinjau halaman tamu",
+      "isDefault": "Masih default"
+    },
+    "form": {
+      "title": "Ubah branding",
+      "hint": "Berlaku untuk semua acara"
+    },
+    "fields": {
+      "heading": "Judul",
+      "subheading": "Subjudul",
+      "footer": "Catatan kaki",
+      "logoUrl": "URL logo",
+      "logoHint": "Kosongkan judul untuk memakai nama acara, lalu nama aplikasi. Logo kosong berarti tanpa gambar — bukan kotak rusak."
+    }
+  },
+  "share": {
+    "title": "Bagikan album",
+    "signedOut": "Masuk sebagai operator dulu di tab Galeri untuk membagikan album.",
+    "noGallery": "Belum ada galeri aktif. Pilih galeri di tab Galeri dulu supaya tautannya bisa dibagikan.",
+    "galleryUrl": "Tautan galeri tamu",
+    "cardUrl": "Tautan kartu share",
+    "cardHint": "Pakai tautan kartu untuk dikirim ke grup: WhatsApp/Telegram mempratinjaunya dengan judul dan logo acara.",
+    "apiHint": "Halaman kartu hidup di {{prefix}}<hash>/share, sebaris dengan halaman tamu dan ZIP-nya.",
+    "result": {
+      "shared": "Terbagikan.",
+      "opened": "Aplikasi dibuka di tab baru.",
+      "copied": "Tautan disalin ke clipboard.",
+      "manual": "Clipboard diblokir — tautannya ditampilkan untuk disalin manual."
+    }
+  },
+  "guestbook": {
+    "title": "Video guestbook",
+    "signedOut": "Masuk sebagai operator dulu di tab Galeri untuk memoderasi guestbook.",
+    "noGallery": "Belum ada galeri aktif. Guestbook melekat pada acara, jadi pilih galeri dulu di tab Galeri.",
+    "count": "{{count}} pesan",
+    "note": "Total durasi {{seconds}} detik. Yang disembunyikan tetap tersimpan dan bisa ditampilkan lagi.",
+    "loading": "Memuat…",
+    "refresh": "Muat ulang",
+    "empty": "Belum ada pesan dari tamu untuk acara ini.",
+    "duration": "{{seconds}}s",
+    "hidden": "Disembunyikan",
+    "hide": "Sembunyikan",
+    "show": "Tampilkan",
+    "delete": "Hapus permanen"
+  },
+  "print": {
+    "title": "Antrean cetak",
+    "runNext": "Cetak berikutnya",
+    "clear": "Bersihkan yang selesai",
+    "empty": "Antrean kosong. Auto-print yang menyala akan mengisi ini sendiri saat sesi selesai.",
+    "sheets": "lembar keluar",
+    "copies": "{{count}} salinan",
+    "attempts": "{{count}} percobaan",
+    "reprintOf": "reprint dari #{{seq}}",
+    "reprint": "Cetak ulang",
+    "status": {
+      "queued": "Antre",
+      "printing": "Mencetak",
+      "done": "Selesai",
+      "failed": "Gagal"
     }
   }
 }

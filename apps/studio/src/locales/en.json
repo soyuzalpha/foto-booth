@@ -175,7 +175,11 @@
     "gallery": "Gallery & upload",
     "booking": "Booking & reservations",
     "leads": "Leads & analytics",
-    "kiosk": "Kiosk mode"
+    "kiosk": "Kiosk mode",
+    "branding": "Branding",
+    "share": "Share",
+    "guestbook": "Guestbook",
+    "print": "Print queue"
   },
   "template": {
     "title": "Template editor",
@@ -506,6 +510,78 @@
     "consent": {
       "title": "UU PDP consent",
       "note": "This sentence is shown to guests and stored verbatim alongside their data, with its version. If the wording changes, old records still prove which version was agreed to."
+    }
+  },
+  "branding": {
+    "title": "Branding & white-label",
+    "signedOut": "Sign in as operator in the Gallery tab first — branding is stored per account, so it needs a session.",
+    "loading": "Loading",
+    "saving": "Saving…",
+    "save": "Save branding",
+    "refresh": "Reload",
+    "reset": "Restore defaults",
+    "saved": "Branding saved. Guest pages and share cards pick it up immediately.",
+    "preview": {
+      "title": "Guest page preview",
+      "isDefault": "Still default"
+    },
+    "form": {
+      "title": "Edit branding",
+      "hint": "Applies to every event"
+    },
+    "fields": {
+      "heading": "Heading",
+      "subheading": "Subheading",
+      "footer": "Footer note",
+      "logoUrl": "Logo URL",
+      "logoHint": "Leave the heading empty to fall back to the event name, then the app name. An empty logo means no image — not a broken box."
+    }
+  },
+  "share": {
+    "title": "Share album",
+    "signedOut": "Sign in as operator in the Gallery tab to share the album.",
+    "noGallery": "No active gallery yet. Pick one in the Gallery tab so its link can be shared.",
+    "galleryUrl": "Guest gallery link",
+    "cardUrl": "Share card link",
+    "cardHint": "Use the card link for group chats: WhatsApp/Telegram preview it with the event title and logo.",
+    "apiHint": "The card page lives at {{prefix}}<hash>/share, in line with the guest page and its ZIP.",
+    "result": {
+      "shared": "Shared.",
+      "opened": "Opened the app in a new tab.",
+      "copied": "Link copied to clipboard.",
+      "manual": "Clipboard blocked — the link is shown so you can copy it by hand."
+    }
+  },
+  "guestbook": {
+    "title": "Video guestbook",
+    "signedOut": "Sign in as operator in the Gallery tab to moderate the guestbook.",
+    "noGallery": "No active gallery yet. The guestbook belongs to an event, so pick a gallery in the Gallery tab first.",
+    "count": "{{count}} messages",
+    "note": "{{seconds}} seconds total. Hidden messages are kept and can be shown again.",
+    "loading": "Loading…",
+    "refresh": "Reload",
+    "empty": "No guest messages for this event yet.",
+    "duration": "{{seconds}}s",
+    "hidden": "Hidden",
+    "hide": "Hide",
+    "show": "Show",
+    "delete": "Delete permanently"
+  },
+  "print": {
+    "title": "Print queue",
+    "runNext": "Print next",
+    "clear": "Clear finished",
+    "empty": "The queue is empty. Auto-print, when on, fills it on its own as sessions finish.",
+    "sheets": "sheets out",
+    "copies": "{{count}} copies",
+    "attempts": "{{count}} attempts",
+    "reprintOf": "reprint of #{{seq}}",
+    "reprint": "Reprint",
+    "status": {
+      "queued": "Queued",
+      "printing": "Printing",
+      "done": "Done",
+      "failed": "Failed"
     }
   }
 }

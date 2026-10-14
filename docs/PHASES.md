@@ -728,9 +728,9 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 
 ## Fase 9 — Leads + analytics + branding
 
-**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
+**Status:** `[~]` — **kode + validasi lokal selesai (2026-10-14), menunggu CI + container.** Inti Leads + Analytics dikerjakan lebih dulu; bagian **branding/white-label, sharing (termasuk share card ber-OG), auto-print + queue/retry/reprint, dan video guestbook** menyusul dan **kini sudah ada** — shared, API, studio, tes, locale, dan consent UU PDP. Payment tetap tidak disentuh. Satu sub-item (**#51/#52**: tombol tamu di layar hasil kiosk) masih sebagian: konfigurasi + toggle operatornya ada, tapi layar hasil belum memakainya; ini dipindah ke Fase 12 (kiosk) dan dicatat di bawah. Centang `[x]` menyusul **setelah** CI hijau + container `foto-booth` healthy di tag SHA commit ini (lihat *Bukti*).
 **Gate masuk:** `[x]` terpenuhi — Fase 8 gate keluar sudah lolos; yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada AI: menangkap data tamu + menghitungnya.
-**Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu.
+**Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu — dan acara bisa membawa nama klien, dibagikan, serta mencetak sendiri.
 
 **Kenapa sekarang:** Fase 11 (Booking) menaruh dua tugasnya sebagai "ditunda: butuh Fase 9" (konfirmasi email/WA + reminder H-1). Inti Leads/Analytics dibangun lebih dulu supaya jalur itu punya tempat berpijak. Sisa Fase 9 (branding, sharing, auto-print) menyusul bersama Fase 7/8.
 
@@ -739,11 +739,14 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 | Area | File |
 |---|---|
 | Shared — logika murni | `packages/shared/src/leads.ts` (bentuk field, validasi, CSV) · `constants.ts` (blok "Leads & analytics") · `schemas.ts` (Zod leads/analytics) |
+| Shared — Fase 9 lanjutan | `packages/shared/src/branding.ts` (white-label: nama, logo, heading/subheading, sanitasi) · `sharing.ts` (kanal, tautan, teks, judul/heading bersama) · `guestbook.ts` (jenis entri, tipe konten, batas, moderasi) · `printQueue.ts` (keputusan cetak: salinan, retry, menyerah, ringkasan antrean) |
 | API — rute | `apps/api/src/routes/leads.ts` (publik + operator) · `apps/api/src/routes/analytics.ts` · `apps/api/src/leadLimiter.ts` (kuota bersama) |
+| API — Fase 9 lanjutan | `apps/api/src/routes/branding.ts` (publik + operator) · `apps/api/src/routes/guestbook.ts` (unggah tamu + moderasi operator) · `apps/api/src/routes/share.ts` (`GET /s/:hash` — share card ber-OG) · `apps/api/src/{db,store}.ts` (migrasi id 6 `branding-guestbook`) · `apps/api/src/app.ts` (registrasi rute) |
 | API — halaman tamu | `apps/api/src/routes/gallery.ts` (`leadFormHtml`, cookie kunjungan harian) · `apps/api/src/pages.ts` (CSS form) |
-| Studio | `apps/studio/src/components/LeadsPanel.tsx` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.ts` |
+| Studio — leads | `apps/studio/src/components/LeadsPanel.tsx` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.ts` |
+| Studio — Fase 9 lanjutan | `apps/studio/src/components/{BrandingPanel,SharePanel,GuestbookPanel,PrintQueuePanel}.tsx` · `apps/studio/src/lib/branding/{brandingClient,useBranding}.ts` · `apps/studio/src/lib/sharing/shareClient.ts` · `apps/studio/src/lib/guestbook/{guestbookClient,useGuestbook}.ts` · `apps/studio/src/lib/print/{printQueueRunner,usePrintQueue}.ts` · `App.tsx` (4 tab baru) · `src/locales/{id,en}.json` (tabs + consent UU PDP + panel) |
 | E2E | `e2e/phase9-leads.e2e.mjs` (10 bagian, **57 pemeriksaan**) |
-| Tes | `packages/shared/src/leads.test.ts` (37) · `apps/api/src/routes/leads.test.ts` (34) · `apps/api/src/routes/analytics.test.ts` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.test.ts` |
+| Tes | `packages/shared/src/{leads,branding,sharing,guestbook,printQueue}.test.ts` · `apps/api/src/routes/{leads,analytics,branding,guestbook,share}.test.ts` · `apps/studio/src/lib/leads/{leadsClient,useLeads,downloadCsv}.test.ts` · `apps/studio/src/lib/branding/brandingClient.test.ts` · `apps/studio/src/lib/sharing/shareClient.test.ts` · `apps/studio/src/lib/guestbook/guestbookClient.test.ts` · `apps/studio/src/lib/print/printQueueRunner.test.ts` |
 
 **Task**
 
@@ -757,14 +760,18 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 - [x] Rate-limit + honeypot di jalur tamu; kuota **dibagi** antara `POST /v1/leads` dan form galeri (bukan dua hitungan terpisah)
 - [x] Panel studio: daftar field, daftar kiriman, unduh CSV, hapus kiriman — dipisah dua lapis (klien HTTP murni + controller tanpa React + pembungkus hook + komponen) supaya janji non-UI teruji tanpa React
 - [x] Klien divalidasi **per-item**: satu baris balasan rusak dibuang, sisanya tetap tampil (panel tidak dikosongkan)
-- [ ] Branding/white-label (logo, heading, subheading) → **ditunda: menyusul Fase 7/8**
-- [ ] Sharing (email / SMS / sosial / WhatsApp deep link / branded share page + OG image) → **ditunda**
-- [ ] Auto-print + copies + print queue/retry/reprint → **ditunda** (butuh printer, Fase 12)
-- [ ] Toggle tombol gallery/print/share + warning keluar di kiosk → **ditunda**
-- [ ] Video guestbook → **ditunda: butuh Fase 7** (video)
+- [x] Branding/white-label: logo (URL dinormalisasi, hanya http/https), heading/subheading/footer dengan batas panjang, `normalizeBranding` sebagai satu-satunya pintu masuk; `resolvedHeading`/`resolvedSubheading` menjatuhkan diri ke nama acara lalu ke default
+- [x] Sharing: 5 kanal (`whatsapp`/`email`/`sms`/`native`/`copy`), `shareLink` (deep link WA/`mailto:`/`sms:`), `shareText` (dipotong di batas kata), `sharePageTitle`; studio **memakai** fungsi shared, tidak merakit tautan sendiri
+- [x] Share card publik `GET /s/:hash` — HTML ber-meta **Open Graph + Twitter card** (judul/deskripsi dari branding acara), jadi tautan yang dikirim ke WA/medsos menampilkan kartu, bukan teks kosong
+- [x] Auto-print + queue/retry/reprint: keputusan murni di shared (`createPrintJob`, `nextJob`, `applyPrintResult`, `claimNextJob`, `summarizeQueue`, `shouldAutoPrint`); `PRINT_COPIES_MAX` dipakai bersama sehingga rentang salinan konsisten antara pembuat tugas dan runner
+- [x] Retry berjenjang sampai `PRINT_MAX_ATTEMPTS`, lalu `failed` — bukan mengulang tanpa batas; `createReprint` membuat tugas baru yang menunjuk asal, riwayatnya tidak hilang
+- [x] Runner studio (`printQueueRunner.ts` + `usePrintQueue.ts`) hanya **mengeksekusi**: memanggil printer, mencatat hasil, menjadwalkan ulang sesuai keputusan shared
+- [x] Video guestbook: unggah tamu (`video/mp4`, `video/webm`, `audio/webm`), validasi jenis/tipe/ukuran/durasi, moderasi operator (`hidden`), paginasi; kunci objek diturunkan (`guestbookKey`)
+- [x] **Consent UU PDP di jalur guestbook** (`validateGuestbookDraft`): centang wajib `true` — `false`, `"true"`, dan `1` semuanya ditolak — diperiksa di shared sehingga `/v1/guestbook/upload-url` **dan** `POST /v1/guestbook` menolak sebelum ada baris/objek apa pun; tes menegaskan dinding tetap kosong setelah kiriman tanpa centang. Diperiksa **terakhir**, sesudah batas berkas, supaya tamu diberi tahu soal berkasnya dulu.
+- [ ] Toggle tombol gallery/print/share + warning keluar di kiosk → **dipindah ke Fase 12 (kiosk)**: konfigurasi + toggle operator sudah ada (`kioskConfig`/`KioskPanel`), tapi layar hasil kiosk belum memakainya — dikerjakan bersama layar kiosk
 - [ ] Konfirmasi email/WA + reminder H-1 (deferral Fase 11) → **ditunda: belum ada SMTP/WA di infra**
 
-**Kriteria terima (FEATURE-MATRIX):** §B baris **Fase = 9** — yang tertutup sekarang: #73, #74, #75, #76, #77, #78. Sisanya (#19, #44, #46, #51, #52, #56–#61) ditunda seperti di atas.
+**Kriteria terima (FEATURE-MATRIX):** §B baris **Fase = 9** — tertutup: #19 (guestbook), #44/#46 (auto-print + queue/retry/reprint), #56–#59 (sharing + share page), #61 (branding), #73–#78 (leads/analytics). Tersisa #51/#52 (tombol tamu di layar hasil kiosk) yang **dipindah ke Fase 12** — lihat task di atas.
 
 **Validasi**
 

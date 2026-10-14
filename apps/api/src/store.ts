@@ -15,15 +15,20 @@ import type {
   BookingPackage,
   BookingSettings,
   BookingStatus,
+  Branding,
   DepositStatus,
   Entitlement,
   EntitlementPlan,
   Event,
   Gallery,
+  GuestbookEntry,
+  GuestbookEntryKind,
   Lead,
   LeadField,
   Photo,
 } from "@foto-booth/shared";
+
+import { isGuestbookEntryKind, normalizeBranding } from "@foto-booth/shared";
 
 import type { Db } from "./db.ts";
 
@@ -742,6 +747,145 @@ export function saveBookingSettings(db: Db, settings: BookingSettings, now: stri
     `INSERT INTO booking_settings (id, json, updated_at) VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
   ).run(JSON.stringify(settings), now);
+}
+
+/* ------------------------------------------------------------------ *
+ * Branding (Fase 9) — satu baris JSON, sama pola dengan booking settings
+ * ------------------------------------------------------------------ */
+
+/**
+ * Branding tersimpan, atau `null` kalau operator belum pernah menyimpannya.
+ *
+ * `null` dibedakan dari `DEFAULT_BRANDING` supaya route bisa membalas
+ * "belum diatur" tanpa menebak. JSON rusak juga jadi `null`: lebih jujur
+ * menampilkan default daripada memaksa halaman tamu memakai setengah nilai.
+ */
+export function getBranding(db: Db): Branding | null {
+  const raw = db.prepare("SELECT json FROM app_settings WHERE id = 1").get();
+  if (raw === undefined) return null;
+  try {
+    return normalizeBranding(JSON.parse(str(raw.json)));
+  } catch {
+    return null;
+  }
+}
+
+export function saveBranding(db: Db, branding: Branding, now: string): void {
+  db.prepare(
+    `INSERT INTO app_settings (id, json, updated_at) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
+  ).run(JSON.stringify(normalizeBranding(branding)), now);
+}
+
+/* ------------------------------------------------------------------ *
+ * Guestbook (Fase 9)
+ * ------------------------------------------------------------------ */
+
+export interface GuestbookRow {
+  eventId: string;
+  galleryId: string | null;
+  kind: GuestbookEntryKind;
+  contentType: string;
+  key: string;
+  durationSeconds: number;
+  bytes: number;
+  label: string;
+  visible: boolean;
+}
+
+function toGuestbookEntry(raw: Record<string, unknown>): GuestbookEntry {
+  return {
+    id: str(raw.id),
+    eventId: str(raw.event_id),
+    galleryId: typeof raw.gallery_id === "string" && raw.gallery_id !== "" ? raw.gallery_id : null,
+    kind: isGuestbookEntryKind(str(raw.kind)) ? (str(raw.kind) as GuestbookEntryKind) : "video",
+    contentType: str(raw.content_type),
+    key: str(raw.key),
+    durationSeconds: num(raw.duration_seconds),
+    bytes: num(raw.bytes),
+    label: str(raw.label),
+    // SQLite tidak punya boolean: `0` → `false`, apa pun selain itu → `true`.
+    visible: num(raw.visible) !== 0,
+    createdAt: str(raw.created_at),
+  };
+}
+
+export function insertGuestbookEntry(
+  db: Db,
+  id: string,
+  row: GuestbookRow,
+  createdAt: string,
+): GuestbookEntry {
+  db.prepare(
+    `INSERT INTO guestbook_entries
+       (id, event_id, gallery_id, kind, content_type, key, duration_seconds, bytes, label, visible, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.eventId,
+    row.galleryId,
+    row.kind,
+    row.contentType,
+    row.key,
+    row.durationSeconds,
+    row.bytes,
+    row.label,
+    row.visible ? 1 : 0,
+    createdAt,
+  );
+  return { id, ...row, createdAt };
+}
+
+export function getGuestbookEntry(db: Db, id: string): GuestbookEntry | null {
+  const raw = db.prepare("SELECT * FROM guestbook_entries WHERE id = ?").get(id);
+  return raw === undefined ? null : toGuestbookEntry(raw);
+}
+
+export interface GuestbookFilter {
+  eventId?: string;
+  /** `true` = hanya yang tampil (dipakai halaman tamu). */
+  visibleOnly?: boolean;
+  limit?: number;
+}
+
+/** Terbaru dulu — pesan terakhir paling relevan untuk dinding guestbook. */
+export function listGuestbookEntries(db: Db, filter: GuestbookFilter = {}): GuestbookEntry[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.eventId !== undefined) {
+    where.push("event_id = ?");
+    params.push(filter.eventId);
+  }
+  if (filter.visibleOnly === true) {
+    where.push("visible = 1");
+  }
+
+  const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "";
+  const limit = filter.limit === undefined ? "" : ` LIMIT ${Math.max(1, Math.trunc(filter.limit))}`;
+  const rows = db
+    .prepare(`SELECT * FROM guestbook_entries${clause} ORDER BY created_at DESC, id DESC${limit}`)
+    .all(...params);
+  return rows.map(toGuestbookEntry);
+}
+
+/** Sembunyikan/tampilkan satu entri. `false` kalau id tidak ada. */
+export function setGuestbookVisibility(db: Db, id: string, visible: boolean): GuestbookEntry | null {
+  const result = db
+    .prepare("UPDATE guestbook_entries SET visible = ? WHERE id = ?")
+    .run(visible ? 1 : 0, id);
+  if (Number(result.changes) === 0) return null;
+  return getGuestbookEntry(db, id);
+}
+
+export function deleteGuestbookEntry(db: Db, id: string): number {
+  return Number(db.prepare("DELETE FROM guestbook_entries WHERE id = ?").run(id).changes);
+}
+
+export function countGuestbookEntries(db: Db, eventId: string): number {
+  return num(
+    db.prepare("SELECT COUNT(*) AS n FROM guestbook_entries WHERE event_id = ?").get(eventId)?.n,
+  );
 }
 
 /* ------------------------------------------------------------------ *

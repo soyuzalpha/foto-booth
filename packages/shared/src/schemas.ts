@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 import { BOOKING_STATUSES, DEPOSIT_STATUSES } from "./booking.ts";
+import { type Branding } from "./branding.ts";
 import { CONTENT_KINDS } from "./constants.ts";
+import {
+  GUESTBOOK_ENTRY_KINDS,
+  GUESTBOOK_LABEL_MAX,
+  type GuestbookEntry,
+} from "./guestbook.ts";
 import {
   LEAD_FIELD_TYPES,
   LEAD_VALUE_MAX,
@@ -681,6 +687,63 @@ export const AnalyticsOverviewSchema = z.object({
   events: z.array(EventAnalyticsSchema),
 });
 export type AnalyticsOverview = z.infer<typeof AnalyticsOverviewSchema>;
+
+/* ------------------------------------------------------------------ *
+ * Branding, sharing & guestbook (Fase 9)
+ *
+ * Logika murninya ada di `branding.ts`, `sharing.ts`, dan `guestbook.ts`.
+ * Yang di sini cuma bentuk kabel. `BrandingSchema` sengaja **longgar** (string
+ * biasa, bukan `.max()`): normalisasi sebenarnya (`normalizeBranding`) memotong
+ * & membersihkan nilai rusak alih-alih menolaknya. Menolak di sini akan
+ * membuat operator kehilangan seluruh simpanan gara-gara satu spasi lebih.
+ * ------------------------------------------------------------------ */
+
+export const BrandingSchema: z.ZodType<Branding> = z.object({
+  logoUrl: z.string().nullable(),
+  heading: z.string(),
+  subheading: z.string(),
+  footer: z.string(),
+});
+
+/** Body `PUT /v1/branding` — semua opsional; yang tidak dikirim dibiarkan. */
+export const UpdateBrandingSchema = z
+  .object({
+    logoUrl: z.string().nullable().optional(),
+    heading: z.string().optional(),
+    subheading: z.string().optional(),
+    footer: z.string().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "tidak ada yang diubah" });
+export type UpdateBranding = z.infer<typeof UpdateBrandingSchema>;
+
+/** `z.ZodType` karena tipe aslinya milik `guestbook.ts` (satu sumber). */
+export const GuestbookEntrySchema: z.ZodType<GuestbookEntry> = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  galleryId: z.string().nullable(),
+  kind: z.enum(GUESTBOOK_ENTRY_KINDS),
+  contentType: z.string(),
+  key: z.string(),
+  durationSeconds: z.number(),
+  bytes: z.number(),
+  label: z.string(),
+  visible: z.boolean(),
+  createdAt: z.string(),
+});
+
+/** Body `POST /v1/guestbook` — metadata setelah berkas naik ke bucket. */
+export const GuestbookDraftSchema = z.object({
+  eventId: z.string().min(1),
+  galleryHash: z.string().min(1).max(64).optional(),
+  kind: z.enum(GUESTBOOK_ENTRY_KINDS),
+  contentType: z.string().min(1),
+  durationSeconds: z.number(),
+  bytes: z.number(),
+  label: z.string().max(GUESTBOOK_LABEL_MAX).optional(),
+  /** Kunci objek dari URL upload; diperiksa di route, bukan dipercaya. */
+  key: z.string().min(1),
+});
+export type GuestbookDraftInput = z.infer<typeof GuestbookDraftSchema>;
 
 /* ------------------------------------------------------------------ *
  * Error

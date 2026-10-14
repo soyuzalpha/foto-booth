@@ -22,6 +22,7 @@ import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import {
+  DEFAULT_BRANDING,
   GALLERY_BASE_PATH,
   GALLERY_TTL_DAYS,
   LEAD_CONSENT_TEXT,
@@ -29,6 +30,8 @@ import {
   activeFieldsFor,
   extForMime,
   mediaKindForContentType,
+  resolvedHeading,
+  resolvedSubheading,
   type Gallery,
   type LeadField,
 } from "@foto-booth/shared";
@@ -38,6 +41,7 @@ import { getObject } from "../objectStore.ts";
 import { verifySecret } from "../secrets.ts";
 import {
   bumpGalleryView,
+  getBranding,
   getEvent,
   getGalleryByHash,
   getGalleryPassword,
@@ -263,6 +267,17 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
       const photos = listPhotos(ctx.db, gallery.id);
       const base = absolute(request, `${GALLERY_BASE_PATH}${gallery.hash}`);
 
+      // Judul/subjudul memakai fungsi branding yang sama dengan halaman share;
+      // merakit ulang di sini akan membuat halaman dan kartu share berbeda
+      // diam-diam begitu operator mengubah branding.
+      const branding = getBranding(ctx.db) ?? DEFAULT_BRANDING;
+      const heading = resolvedHeading(branding, event?.name ?? null);
+      const subheading = resolvedSubheading(
+        branding,
+        event === null ? null : { name: event.name, date: event.date, hashtag: event.hashtag ?? null },
+      );
+      const description = subheading === "" ? "Ambil & bagikan fotonya." : subheading;
+
       // Kunjungan dihitung di sini — bukan di rute terpisah — karena inilah
       // satu-satunya tempat yang tahu halamannya benar-benar dirender ke tamu
       // (bukan halaman password, bukan 404). Cookie harian menahan refresh.
@@ -281,10 +296,12 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
       const firstPhoto = photos[0];
       const ogHead = [
         `<meta property="og:type" content="website">`,
-        `<meta property="og:title" content="${escapeHtml(event?.name ?? "Galeri foto")}">`,
-        `<meta property="og:description" content="${escapeHtml(
-          event === null ? "Ambil & bagikan fotonya." : `Foto dari ${event.date} — ambil & bagikan.`,
-        )}">`,
+        // Judul/deskripsi dari branding, bukan nama acara mentah: preview link
+        // yang dibagikan tamu harus sama dengan judul yang mereka lihat di
+        // halaman. `og:image` tetap thumb foto — logo operator lebih kecil dan
+        // tidak mewakili isi album.
+        `<meta property="og:title" content="${escapeHtml(heading)}">`,
+        `<meta property="og:description" content="${escapeHtml(description)}">`,
         `<meta property="og:url" content="${escapeHtml(base)}">`,
         // Thumb dipakai sebagai OG image: tanpa foto, lebih jujur tidak
         // mengirim og:image sama sekali daripada menunjuk gambar kosong.
@@ -311,8 +328,9 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
 
       const body = `
         <span class="badge">Galeri tamu</span>
-        <h1>${escapeHtml(event?.name ?? "Galeri foto")}</h1>
-        <p>${escapeHtml(event?.date ?? "")}${event?.hashtag ? ` · ${escapeHtml(event.hashtag)}` : ""}</p>
+        ${branding.logoUrl === null ? "" : `<img class="logo" src="${escapeHtml(branding.logoUrl)}" alt="">`}
+        <h1>${escapeHtml(heading)}</h1>
+        ${subheading === "" ? "" : `<p>${escapeHtml(subheading)}</p>`}
         ${
           photos.length === 0
             ? `<p>Belum ada foto di galeri ini.</p>`
@@ -324,9 +342,10 @@ export async function galleryRoutes(app: FastifyInstance, ctx: ServerContext): P
             : `<div class="row"><a class="btn" href="${escapeHtml(`${base}/zip`)}">Unduh semua (${photos.length})</a></div>`
         }
         <p class="note">Galeri ini dihapus otomatis ${GALLERY_TTL_DAYS} hari setelah dibuat.</p>
+        ${branding.footer === "" ? "" : `<p class="note">${escapeHtml(branding.footer)}</p>`}
         ${leadFormHtml(gallery, fields, request.query.status)}`;
 
-      return reply.type("text/html; charset=utf-8").send(shell(event?.name ?? "Galeri foto", body, ogHead));
+      return reply.type("text/html; charset=utf-8").send(shell(heading, body, ogHead));
     },
   );
 
