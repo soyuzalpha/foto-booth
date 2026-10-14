@@ -43,7 +43,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 6 | Green screen + adjustments + face enhance | L | `[x]` **selesai** — 19/19 e2e; GFPGAN ~340 MB belum diunggah |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[x]` **selesai** — 138 tes mesin video; model RIFE belum diunggah |
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[x]` **selesai** — BYOK via header `x-gemini-key`; upscale & AI template elements ditunda |
-| 9 | Leads + analytics + branding | M | `[~]` **inti Leads+Analytics selesai** — branding/sharing/auto-print ditunda |
+| 9 | Leads + analytics + branding | M | `[x]` **selesai** — branding/sharing/auto-print/guestbook + consent UU PDP; tombol kiosk #51/#52 dipindah ke Fase 12 |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
 | 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
@@ -728,7 +728,7 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 
 ## Fase 9 — Leads + analytics + branding
 
-**Status:** `[~]` — **kode + validasi lokal selesai (2026-10-14), menunggu CI + container.** Inti Leads + Analytics dikerjakan lebih dulu; bagian **branding/white-label, sharing (termasuk share card ber-OG), auto-print + queue/retry/reprint, dan video guestbook** menyusul dan **kini sudah ada** — shared, API, studio, tes, locale, dan consent UU PDP. Payment tetap tidak disentuh. Satu sub-item (**#51/#52**: tombol tamu di layar hasil kiosk) masih sebagian: konfigurasi + toggle operatornya ada, tapi layar hasil belum memakainya; ini dipindah ke Fase 12 (kiosk) dan dicatat di bawah. Centang `[x]` menyusul **setelah** CI hijau + container `foto-booth` healthy di tag SHA commit ini (lihat *Bukti*).
+**Status:** `[x]` **selesai & tervalidasi (2026-10-14)** — commit `d298379`, CI hijau, container `foto-booth` `healthy` di tag SHA itu. Inti Leads + Analytics dikerjakan lebih dulu; bagian **branding/white-label, sharing (termasuk share card ber-OG), auto-print + queue/retry/reprint, dan video guestbook (termasuk consent UU PDP)** menyusul dan kini **sudah ada** — shared, API, studio, tes, locale. Payment tetap tidak disentuh. Satu sub-item (**#51/#52**: tombol tamu di layar hasil kiosk) masih sebagian: konfigurasi + toggle operatornya ada, tapi layar hasil belum memakainya; ini dipindah ke Fase 12 (kiosk) dan dicatat di bawah.
 **Gate masuk:** `[x]` terpenuhi — Fase 8 gate keluar sudah lolos; yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada AI: menangkap data tamu + menghitungnya.
 **Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu — dan acara bisa membawa nama klien, dibagikan, serta mencetak sendiri.
 
@@ -790,16 +790,28 @@ node e2e/phase9-leads.e2e.mjs
 - [x] Kiriman beruntun lewat **form galeri** ditahan dan dilaporkan `?status=penuh`, bukan "isian salah" (`leads.test.ts` + e2e bagian 10)
 - [x] Kuota tidak bisa digandakan dengan berpindah jalur (`leads.test.ts` — "kuota dibagi antara form galeri dan POST /v1/leads")
 - [x] Field nonaktif hilang dari form tamu tapi tetap tersimpan untuk riwayat (e2e bagian 9)
-- [ ] CI hijau + container healthy → dijalankan di gate deploy
+- [x] CI hijau + container healthy → **ya** (lihat *Bukti*): worker run 2026-10-14 14:39 UTC **17/17 step `Result: true`, 0 gagal**; container `foto-booth` image tag `d298379…` `healthy`.
 
-**Gate keluar:** ⛔ **belum terpenuhi** — bagian branding/sharing/auto-print/video-guestbook dan konfirmasi email/WA belum ada. Inti Leads (field custom, consent, CSV, hak hapus) dan Analytics per acara **sudah** terbukti lewat tes + e2e.
+**Gate keluar:** ✅ **terpenuhi** — bagian branding/sharing/auto-print/video-guestbook **sudah ada dan teruji**; yang tersisa hanya konfirmasi email/WA, dan itu memang milik Fase 11 (ditunda: belum ada SMTP/WA di infra).
 
 **Bukti** (2026-10-14)
 
-- `pnpm lint` → 0 · `pnpm typecheck` → 0 (shared · api · studio) · `pnpm build` → 0
-- Tes: shared **107** · api **119** · studio **702** — semua hijau, 0 gagal
+**Validasi lokal (sebelum commit `d298379`)**
+
+- `pnpm lint` → 0 · `pnpm -r typecheck` → 0 (shared · api · studio) · `pnpm build` → 0 · `node docs/check.mjs` → 0 · `node docs/phases-status.mjs` → 0
+- Tes: shared **171** · api **166** · studio **924** — semua hijau, 0 gagal
 - `node e2e/phase9-leads.e2e.mjs` → **57 pemeriksaan lulus**
 - Satu bug nyata ditemukan & diperbaiki oleh e2e ini: pembatas laju hanya terpasang di `POST /v1/leads`, sedangkan jalur yang benar-benar dipakai tamu (`POST /a/:hash/lead`) tidak dibatasi sama sekali — sekarang satu `leadLimiter` dipakai bersama, jadi kuota tidak bisa digandakan dengan berpindah pintu.
+- Consent UU PDP guestbook dipaksa di `validateGuestbookDraft`: `false`, `"true"`, dan `1` semuanya ditolak; tes menegaskan dinding guestbook tetap kosong sesudah kiriman tanpa centang, jadi tidak ada baris **maupun objek** yang tertinggal.
+
+**Rilis (setelah push `main`)**
+
+- CI/CD worker run **2026-10-14 14:39 UTC** → **17/17 step `Result: true`, 0 gagal**
+- Container produksi: `foto-booth` image `foto-booth:d2983795162450248da3946ecfd1a4567c48e2c0`, status **`healthy`**
+- `curl` publik `https://foto.soyuz.my.id` → `/` **200** · `/health` **200** · `/studio/` **200**
+- Rute Fase 9 terbukti hidup di produksi: `/v1/branding` **200** (balasan `{"branding":{…},"isDefault":true}`) · `/v1/guestbook` **400** `{"error":"invalid_request","message":"acara tidak ditentukan"}` (rute jalan, menolak tanpa param) · `/s/<hash-tak-ada>` **404** dengan **halaman HTML** milik aplikasi, bukan 404 kosong — artinya share card route terdaftar dan menangani hash tak dikenal sendiri.
+
+**Gate keluar Fase 9 → Fase 10:** ✅ terpenuhi — semua task Fase 9 `[x]` kecuali tiga yang memang ditunda dengan alasan tertulis (#51/#52 tombol kiosk → Fase 12; konfirmasi email/WA → butuh SMTP/WA yang belum ada; payment → ditunda atas permintaan pemilik produk), validasi lolos, bukti tercatat di atas.
 
 ---
 
