@@ -9,6 +9,7 @@ import { APP_NAME, APP_VERSION, STUDIO_BASE_PATH } from "@foto-booth/shared";
 import { CONTENT_DIR, LANDING_DIR, STUDIO_DIST_DIR } from "./paths.ts";
 import type { ServerContext } from "./context.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { aiRoutes } from "./routes/ai.ts";
 import { bookingPageRoutes } from "./routes/booking-pages.ts";
 import { bookingRoutes } from "./routes/booking.ts";
 import { contentRoutes } from "./routes/content.ts";
@@ -74,6 +75,11 @@ export async function buildApp(
   // berdasarkan spesifisitas.
   await leadRoutes(app, ctx);
   await analyticsRoutes(app, ctx);
+
+  // Proxy AI BYOK (Fase 8). Rute operator: butuh token OTP + header kunci
+  // Gemini milik operator sendiri. Didaftarkan setelah leads/analytics karena
+  // tidak berbagi data dengan keduanya — urutannya hanya soal keterbacaan.
+  await aiRoutes(app, ctx);
 
   // Model AI statis (`$STORAGE_DIR/models/`) — read-only, di luar git.
   await modelRoutes(app);

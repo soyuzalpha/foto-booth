@@ -15,6 +15,8 @@ import { describeShutterOffset } from "../lib/capture/shutterOffset.ts";
 import { CHROMA_SWATCHES } from "../lib/filters/filterSettingsStore.ts";
 import { useFilterSettings } from "../lib/filters/useFilterSettings.ts";
 import type { BackgroundMode, RotationDegrees } from "../lib/filters/types.ts";
+import { AI_STYLE_OPTIONS, AI_TASK_OPTIONS, useAiSettings } from "../lib/ai/useAiSettings.ts";
+import { previewAiPrompt } from "../lib/ai/aiEnhance.ts";
 import { useGallery } from "../lib/gallery/galleryContext.ts";
 import { RESOLUTION_PRESETS } from "../lib/transports/resolutions.ts";
 import { deviceBadge } from "../lib/transports/deviceProfile.ts";
@@ -128,7 +130,10 @@ export default function CapturePanel(): React.JSX.Element {
   const capture = useCaptureSession();
   const filters = useFilterSettings();
   const { state, session, frames } = capture;
-  const { intake, active } = useGallery();
+  const { intake, active, session: operatorSession } = useGallery();
+  // Efek AI (Fase 8). BYOK: kunci milik operator disimpan di perangkatnya, dan
+  // token sesi operator dipakai sebagai tiket masuk ke proxy di server rumah.
+  const ai = useAiSettings({ token: operatorSession?.token ?? null });
 
   // Hasil simpan sesi terakhir. Ditampilkan sebagai pesan, bukan toast: di
   // kiosk, pesan yang hilang sendiri berarti operator tidak pernah tahu
@@ -225,11 +230,32 @@ export default function CapturePanel(): React.JSX.Element {
     capture.accept();
     if (source === null) return;
 
+    /**
+     * Urutan efek: filter dulu, baru AI.
+     *
+     * Alasannya bukan selera: filter adalah koreksi deterministik pada foto
+     * (rotasi, kroma, koreksi warna) yang operator lihat di layar saat menjepret.
+     * AI bekerja paling baik pada foto yang sudah lurus dan terwarnai benar —
+     * dan kalau AI gagal, yang disimpan adalah hasil filter, bukan foto mentah.
+     */
+    const processPhoto = async (blob: Blob) => {
+      let current = blob;
+      const filtered = await filters.process(blob);
+      if (filtered !== null && filtered.blob.size > 0) current = filtered.blob;
+
+      const styled = await ai.process(current);
+      if (styled === null) {
+        // AI mati/gagal → hasil filter (atau blob asli) yang disimpan.
+        return filtered;
+      }
+      return styled;
+    };
+
     const photos = await framesToIntake(source.frames(), {
       makeThumb,
-      // Filter dijalankan sebelum thumbnail: yang diunggah & yang tampil di
+      // Filter & AI dijalankan sebelum thumbnail: yang diunggah & yang tampil di
       // galeri harus foto yang sudah difilter, bukan versi mentahnya.
-      process: filters.process,
+      process: processPhoto,
     });
     const summary = await intake(photos);
 
@@ -734,6 +760,113 @@ export default function CapturePanel(): React.JSX.Element {
         </div>
 
         <p className="muted small">{t("capture.filterHint")}</p>
+      </fieldset>
+
+      {/* ── AI (§B25: gaya anime/3D/comic/watercolor/oil + BYOK Gemini) ── */}
+      <fieldset className="settings settings-wide" data-testid="capture-ai">
+        <legend>{t("capture.ai")}</legend>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={ai.settings.enabled}
+            data-testid="ai-enabled"
+            onChange={(event) => ai.update({ enabled: event.target.checked })}
+          />
+          <span>{t("capture.aiEnabled")}</span>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.aiKey")}</span>
+          <input
+            type="password"
+            value={ai.settings.key}
+            data-testid="ai-key"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={t("capture.aiKeyPlaceholder")}
+            onChange={(event) => ai.update({ key: event.target.value })}
+          />
+        </label>
+
+        <label className="field">
+          <span>{t("capture.aiTask")}</span>
+          <select
+            value={ai.settings.task}
+            data-testid="ai-task"
+            onChange={(event) => ai.update({ task: event.target.value as typeof ai.settings.task })}
+          >
+            {AI_TASK_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {t(option.label)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.aiStyle")}</span>
+          <select
+            value={ai.settings.style}
+            data-testid="ai-style"
+            onChange={(event) => ai.update({ style: event.target.value as typeof ai.settings.style })}
+          >
+            {AI_STYLE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {t(option.label)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>{t("capture.aiCustom")}</span>
+          <input
+            type="text"
+            value={ai.settings.custom}
+            data-testid="ai-custom"
+            maxLength={600}
+            placeholder={t("capture.aiCustomPlaceholder")}
+            onChange={(event) => ai.update({ custom: event.target.value })}
+          />
+        </label>
+
+        {/* Pratinjau prompt: operator harus melihat instruksi yang benar-benar
+            dikirim ke Gemini, bukan ringkasan yang dibuat UI. */}
+        <p className="muted small" data-testid="ai-prompt-preview">
+          {previewAiPrompt({
+            task: ai.settings.task,
+            style: ai.settings.style,
+            ...(ai.settings.custom === "" ? {} : { custom: ai.settings.custom }),
+          })}
+        </p>
+
+        {/* Kunci tidak pernah ditampilkan utuh — hanya bentuk tersamarkan. */}
+        {ai.settings.key !== "" && (
+          <p className="muted small" data-testid="ai-key-masked">
+            {t("capture.aiKeySaved", { masked: ai.maskedKey })}
+          </p>
+        )}
+
+        {ai.settings.enabled && !ai.ready && (
+          <p className="banner banner-warn" data-testid="ai-not-ready">
+            {t(operatorSession === null ? "capture.aiNeedLogin" : "capture.aiNeedKey")}
+          </p>
+        )}
+
+        {ai.lastSummary !== null && (
+          <p className="muted small" data-testid="ai-last-summary">
+            {ai.lastSummary}
+          </p>
+        )}
+
+        <div className="field-row">
+          <button className="btn btn-ghost btn-small" type="button" onClick={ai.reset}>
+            {t("capture.aiReset")}
+          </button>
+        </div>
+
+        <p className="muted small">{t("capture.aiHint")}</p>
       </fieldset>
 
       {/* ── video (§B13–§B20: rekam, resolusi/fps/durasi, slow-mo, audio, animasi) ── */}

@@ -42,7 +42,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | **5** | Galeri: upload S3 + halaman tamu + QR + TTL + auth | L | `[x]` **selesai** |
 | 6 | Green screen + adjustments + face enhance | L | `[x]` **selesai** — 19/19 e2e; GFPGAN ~340 MB belum diunggah |
 | 7 | Video + slow-mo (WebCodecs + RIFE) | L | `[x]` **selesai** — 138 tes mesin video; model RIFE belum diunggah |
-| 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[ ]` |
+| 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[x]` **selesai** — BYOK via header `x-gemini-key`; upscale & AI template elements ditunda |
 | 9 | Leads + analytics + branding | M | `[~]` **inti Leads+Analytics selesai** — branding/sharing/auto-print ditunda |
 | 10 | Lisensi + payment (QRIS) | M | `[ ]` |
 | 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
@@ -673,10 +673,63 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 
 ---
 
+## Fase 8 — AI style/backdrop/enhance/remix (Gemini BYOK)
+
+**Status:** `[x]` selesai & tervalidasi lokal (2026-10-14)
+**Gate masuk:** Fase 7 gate keluar terpenuhi (antrian upload sudah menerima foto & video dengan jalur `process` sebelum thumbnail).
+**Tujuan:** foto bisa diubah gayanya (anime/3D/komik/cat air/cat minyak), diperbaiki kualitasnya, latarnya diganti, atau di-remix lucu — **dengan kunci Gemini milik operator sendiri**, dan tanpa pernah mengirim foto tamu ke pihak yang tidak dipilih operator.
+
+**Prinsip (jangan dilanggar)**
+
+1. **BYOK — kunci milik operator, bukan milik server.** Kunci Gemini disimpan di perangkat operator (`localStorage`), dan setiap panggilan membawanya di **header `x-gemini-key`**. Kunci **tidak pernah** masuk body, URL, log, atau balasan; API hanya jadi proxy yang meneruskan lalu membuang.
+2. **Satu sumber kebenaran untuk logika AI.** Prompt, batas ukuran, keputusan task/limit, validasi gaya, dan pembacaan balasan Gemini tinggal di `packages/shared/src/ai.ts` — studio dan API **tidak** menyusun prompt atau menghitung batas sendiri.
+3. **Logika murni terpisah dari DOM.** `buildAiPrompt`, `isActionable`, `normalizeAiKey`, `parseGeminiImage`, `geminiBlockReason` diuji **tanpa browser**; efek piksel (encode/decode data-URL, kanvas) dijalankan adapter DOM (`browserAiImageDeps`).
+4. **AI tidak pernah menghilangkan foto.** Gagal di mana pun → `{ ok: false }`, dan yang disimpan adalah hasil **filter** (atau blob mentah kalau filter juga gagal). Jalur sesi tidak pernah melempar karena AI.
+5. **AI berjalan setelah filter.** Filter = koreksi deterministik yang operator lihat saat menjepret (rotasi/kroma/warna); AI bekerja paling baik pada foto yang sudah lurus & benar warnanya. Urutan: **filter → AI → thumbnail**.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Logika AI shared | `packages/shared/src/ai.ts` (`AI_GEMINI_PATH`, `AI_KEY_HEADER`, `AI_MODEL`, `AI_STYLE_IDS`, `AI_TASK_IDS`, `AI_MAX_INPUT_BYTES`/`AI_MAX_OUTPUT_BYTES`, `AI_MAX_PROMPT_CHARS`, `AI_TIMEOUT_MS`, `AI_KEY_MIN_LENGTH`, `AI_IMAGE_MIME_TYPES`, `AI_RATE_LIMIT`/`AI_RATE_WINDOW_MS`, `buildAiPrompt`, `normalizeAiKey`, `keyFingerprint`, `parseGeminiImage`, `geminiBlockReason`) |
+| Proxy API | `apps/api/src/routes/ai.ts` — `POST /v1/ai/gemini` (kunci dari header, batas input/output, timeout, rate limit) · `apps/api/src/app.ts` (registrasi `aiRoutes`) |
+| Klien studio | `apps/studio/src/lib/ai/{aiClient,aiImage,aiEnhance,aiSettingsStore,useAiSettings}.ts` |
+| UI | `CapturePanel.tsx` (fieldset AI: aktif, kunci, efek, gaya, deskripsi, pratinjau prompt, kunci tersamarkan) · `locales/{id,en}.json` |
+
+**Task**
+
+- [x] `ai.ts`: `buildAiPrompt(task, style, custom)` menyusun instruksi nyata yang dikirim ke Gemini + klausa `PRESERVE` (pertahankan identitas & komposisi) — murni, teruji
+- [x] `ai.ts`: `isActionable` menolak kombinasi kosong (gaya `custom` tanpa deskripsi) supaya tidak ada panggilan AI yang membuang kuota operator
+- [x] `ai.ts`: `normalizeAiKey` menolak kunci terlalu pendek/panjang/berisi spasi (salah tempel), `keyFingerprint` hanya untuk pesan, bukan untuk disimpan
+- [x] `ai.ts`: `parseGeminiImage` membaca balasan Gemini (inline data / bagian gambar) & `geminiBlockReason` membaca alasan blokir safety — murni, teruji
+- [x] `ai.ts`: batas eksplisit `AI_MAX_INPUT_BYTES` (8 MB) & `AI_MAX_OUTPUT_BYTES` (20 MB), `AI_MAX_PROMPT_CHARS` (600), `AI_TIMEOUT_MS` (45 s), `AI_RATE_LIMIT` (12/menit)
+- [x] `routes/ai.ts`: kunci **hanya** dari header `x-gemini-key`; body tanpa kunci; kunci tidak masuk log/balasan; `bodyLimit` diturunkan dari batas input
+- [x] `routes/ai.ts`: validasi skema zod (`AiProxyRequestSchema`), tolak MIME tak didukung, tolak gambar di atas batas sebelum menyentuh jaringan
+- [x] `routes/ai.ts`: timeout 45 s + rate limit 12/menit per kunci (fingerprint, bukan nilai kunci)
+- [x] `aiClient.ts`: klien proxy — kunci lewat **header**, bukan body; `reasonFromBody`/`messageFromBody` memetakan kegagalan ke alasan yang bisa ditampilkan; `RETRYABLE` menandai kegagalan sementara
+- [x] `aiImage.ts`: `decodeDataUrl`/`toDataUrl` murni tanpa DOM, `aiEligibleMimeTypes`, `extensionForAiMime` — teruji
+- [x] `aiEnhance.ts`: `applyAiEffect(blob, request, deps)` → `{ ok: true, blob }` / `{ ok: false, reason }`; **tidak pernah melempar**; `previewAiPrompt` untuk pratinjau UI
+- [x] `aiSettingsStore.ts`: baca/tulis pengaturan (kunci, aktif, task, gaya, deskripsi) di perangkat; nilai rusak → default; `maskAiKey` untuk ditampilkan; `isAiConfigured`
+- [x] `useAiSettings.ts`: hook React — menyatukan pengaturan, klien, dan `process`; token sesi operator jadi tiket masuk proxy
+- [x] `CapturePanel.tsx`: fieldset AI + pratinjau prompt yang benar-benar dikirim + kunci tersamarkan + peringatan kalau belum siap
+- [x] Wiring `onAccept`: urutan **filter → AI → thumbnail**, AI gagal → hasil filter tetap disimpan
+- [x] Locale `id`/`en` lengkap, tanpa kunci tak terpakai
+- [x] CI hijau + container healthy
+
+**Gate keluar:** semua task `[x]` · kunci terbukti **tidak** keluar di balasan/URL/log (diuji dengan fetch palsu & inspeksi) · AI gagal terbukti tidak menghilangkan foto · urutan filter→AI terbukti di jalur `onAccept` · bukti ditulis.
+
+**Bukti:** `packages/shared/src/ai.test.ts` + `apps/api/src/routes/ai.test.ts` + `apps/studio/src/lib/ai/*.test.ts`. Gate suite penuh: `pnpm test` **1140 tes hijau** (shared 125 · api 136 · studio 879) · `pnpm typecheck` 0 · `pnpm lint` 0 · `pnpm build` 0. Tes API memakai `app.inject` dengan `fetch` palsu: memastikan kunci hanya lewat header, tidak muncul di balasan, tidak di URL upstream, dan tidak di log; gambar di atas batas ditolak sebelum jaringan disentuh. Tes studio memastikan `applyAiEffect` mengembalikan `{ ok: false }` (bukan lempar) untuk kunci kosong, MIME tak didukung, timeout, dan balasan rusak.
+
+**Ditunda (bukan blocker):** baris FEATURE-MATRIX #29 (AI upscale) & #30 (AI template elements) belum dikerjakan — keduanya butuh model, bukan sekadar panggilan API. AI slow-motion (#31) sudah tuntas di Fase 7. Kunci Gemini nyata **tidak** ada di repo: operator mengisinya di perangkat lewat fieldset AI.
+
+**Gate keluar Fase 8 → Fase 9:** `[x]` terpenuhi — jalur AI jalan end-to-end (pengaturan → proxy → efek → antrian upload) tanpa membocorkan kunci, dan kegagalannya tidak merusak alur sesi.
+
+---
+
 ## Fase 9 — Leads + analytics + branding
 
-**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena Fase 8 belum jalan, dan bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
-**Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 8 belum jalan. Yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada video/AI: menangkap data tamu + menghitungnya.
+**Status:** `[~]` — **inti Leads + Analytics selesai & tervalidasi lokal (2026-10-14).** Belum bisa ditutup (`[x]`) karena bagian **branding/white-label, sharing, auto-print + queue, serta video guestbook** sengaja belum dikerjakan (lihat "Ditunda" di bawah). Payment tetap tidak disentuh.
+**Gate masuk:** `[x]` terpenuhi — Fase 8 gate keluar sudah lolos; yang dikerjakan lebih dulu adalah bagian yang **tidak** bergantung pada AI: menangkap data tamu + menghitungnya.
 **Tujuan:** data tamu terkumpul rapi (dan patuh UU PDP) tanpa operator mencatat manual; operator bisa melihat angka tiap acara tanpa membuka satu-satu.
 
 **Kenapa sekarang:** Fase 11 (Booking) menaruh dua tugasnya sebagai "ditunda: butuh Fase 9" (konfirmasi email/WA + reminder H-1). Inti Leads/Analytics dibangun lebih dulu supaya jalur itu punya tempat berpijak. Sisa Fase 9 (branding, sharing, auto-print) menyusul bersama Fase 7/8.
