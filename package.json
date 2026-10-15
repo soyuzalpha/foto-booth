@@ -18,7 +18,8 @@
     "test:e2e:filters": "node e2e/phase6-filters.e2e.mjs",
     "test:e2e:leads": "node e2e/phase9-leads.e2e.mjs",
     "test:e2e:license": "node e2e/phase10-license.e2e.mjs",
-    "test:e2e:booking": "node e2e/phase11-booking.e2e.mjs"
+    "test:e2e:booking": "node e2e/phase11-booking.e2e.mjs",
+    "test:e2e:smtp": "node e2e/phase11-smtp.e2e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",

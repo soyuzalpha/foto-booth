@@ -17,6 +17,7 @@ import type { S3Config } from "./objectStore.ts";
 import { s3ConfigFromEnv } from "./objectStore.ts";
 import { DB_FILENAME, openDatabase, type Db } from "./db.ts";
 import { STORAGE_DIR } from "./paths.ts";
+import { createSmtpNotifier, smtpConfigFromEnv } from "./smtp.ts";
 
 /** Cara kode OTP sampai ke operator. */
 export interface Mailer {
@@ -66,6 +67,19 @@ export const logNotifier: BookingNotifier = {
     return Promise.resolve();
   },
 };
+
+/**
+ * Pilih kanal kirim dari environment.
+ *
+ * Terpisah dari `createContext` supaya aturannya bisa dibaca di satu tempat:
+ * **SMTP lengkap → SMTP; tidak ada sama sekali → log.** Setengah lengkap sudah
+ * ditolak `smtpConfigFromEnv` (melempar), jadi tidak ada keadaan di mana UI
+ * melaporkan `live: true` padahal kiriman pasti gagal.
+ */
+export function bookingNotifierFromEnv(env: NodeJS.ProcessEnv): BookingNotifier {
+  const config = smtpConfigFromEnv(env);
+  return config === null ? logNotifier : createSmtpNotifier(config);
+}
 
 export interface ServerContext {
   db: Db;
@@ -127,7 +141,7 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, overrides: C
     now: overrides.now ?? (() => new Date()),
     fetch: overrides.fetch ?? globalThis.fetch,
     mailer: overrides.mailer ?? logMailer,
-    notifier: overrides.notifier ?? logNotifier,
+    notifier: overrides.notifier ?? bookingNotifierFromEnv(env),
     exposeOtpCode: overrides.exposeOtpCode ?? env.OTP_DEV_MODE === "1",
   };
 }

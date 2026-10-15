@@ -885,7 +885,7 @@ node e2e/phase10-license.e2e.mjs
 
 ## Fase 11 — Booking & reservasi
 
-**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13); **ditambah invoice/kwitansi, notifikasi booking, penandaan deposit manual, dan job pengingat H-1 (2026-10-14)**. **Belum bisa ditutup** (`[x]`) karena dua dependensi kerasnya masih stub: deposit QRIS (mekanisme order Fase 10 sudah ada, gateway-nya sengaja belum) dan kanal kirim email/WA (belum ada SMTP/WA di infra — `BookingNotifier` default log-only). Payment gateway sengaja **belum dikonekkan** atas permintaan pemilik.
+**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13); **ditambah invoice/kwitansi, notifikasi booking, penandaan deposit manual, dan job pengingat H-1 (2026-10-14)**. **Ditambah kanal kirim email SMTP sungguhan (2026-10-15)** — `apps/api/src/smtp.ts`, hidup kalau `SMTP_*` diisi, tanpa dependensi baru. **Belum bisa ditutup** (`[x]`) karena satu dependensi kerasnya masih stub: deposit QRIS (mekanisme order Fase 10 sudah ada, gateway-nya sengaja belum, ditahan atas permintaan pemilik). WhatsApp tetap tanpa API — teks + `whatsappUrl` disiapkan untuk operator, memang begitu desainnya (tidak butuh kredensial pihak ketiga).
 **Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 10 gate keluar belum terpenuhi (gateway QRIS belum tersambung). Booking dibangun lebih dulu sebagai UI + mekanisme dengan provider pembayaran berupa interface + stub, supaya wiring nanti aditif.
 **Tujuan:** klien bisa memesan jadwal sendiri, operator tidak lagi mencatat manual di WhatsApp.
 
@@ -895,11 +895,11 @@ node e2e/phase10-license.e2e.mjs
 
 | Area | File |
 |---|---|
-| API — logika | `apps/api/src/routes/booking.ts` (rute publik + operator) · `apps/api/src/deposit.ts` (provider + stub) · `apps/api/src/rateLimit.ts` · `apps/api/src/jobs/reminders.ts` (job pengingat H-1) · `apps/api/src/context.ts` (`BookingNotifier`) |
+| API — logika | `apps/api/src/routes/booking.ts` (rute publik + operator) · `apps/api/src/deposit.ts` (provider + stub) · `apps/api/src/rateLimit.ts` · `apps/api/src/jobs/reminders.ts` (job pengingat H-1) · `apps/api/src/context.ts` (`BookingNotifier`) · `apps/api/src/smtp.ts` (kanal kirim email, klien SMTP tanpa dependensi) |
 | API — halaman publik | `apps/api/src/routes/booking-pages.ts` (`/booking`, `/booking/s/<token>`) · `apps/api/src/pages.ts` (shell HTML bersama) |
 | Studio | `apps/studio/src/components/BookingPanel.tsx` (`InvoiceCard`, `RemindersCard`) · `apps/studio/src/lib/booking/{bookingClient,useBookings}.ts` |
 | Shared | `packages/shared/src/booking.ts` (logika murni: slot, overlap, buffer, transisi, ICS) · `invoice.ts` (invoice + pelacakan pelunasan) · `notifications.ts` (teks konfirmasi/reminder, tanpa pengiriman) · `schemas.ts` (Zod booking) · `constants.ts` (`BOOKING_BASE_PATH`, `BOOKING_STATUS_PATH`, `BOOKING_TOKEN_RE`) |
-| E2E | `e2e/phase11-booking.e2e.mjs` (34 langkah, API + browser sungguhan) |
+| E2E | `e2e/phase11-booking.e2e.mjs` (34 langkah, API + browser sungguhan) · `e2e/phase11-smtp.e2e.mjs` (4 langkah, API + server SMTP palsu lewat TCP) |
 | Tes | `packages/shared/src/{booking,invoice,notifications}.test.ts` · `apps/api/src/routes/booking.test.ts` · `apps/studio/src/lib/booking/{bookingClient,useBookings}.test.ts` |
 
 **Model data (di `packages/shared`)**
@@ -921,7 +921,7 @@ node e2e/phase10-license.e2e.mjs
 - [x] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
 - [x] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
 - [x] Konfirmasi + link WhatsApp siap kirim (**mekanisme**, 2026-10-14): `POST /v1/booking/admin/bookings/:id/notify` selalu mengembalikan `subject` + `body` + `whatsappUrl`; konfirmasi juga disiapkan otomatis saat approve. Pengiriman email sungguhan menunggu SMTP — `delivered` melaporkan jujur, tidak pernah mengklaim terkirim kalau kanal belum hidup.
-- [ ] Deposit QRIS → `depositStatus` berubah dari webhook → **ditunda: butuh gateway Fase 10**. Provider pembayaran sudah berupa interface (`deposit.ts`); provider `qris` **melempar** dan ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk. Sementara itu deposit **ditandai manual oleh operator** (`POST /v1/booking/admin/bookings/:id/deposit`, butuh sesi) — menggantikan webhook tanpa berpura-pura ada gateway.
+- [ ] Deposit QRIS → `depositStatus` berubah dari webhook → **ditunda: butuh gateway Fase 10** (ditahan atas permintaan pemilik). Provider pembayaran sudah berupa interface (`deposit.ts`); provider `qris` **melempar** dan ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk. Sementara itu deposit **ditandai manual oleh operator** (`POST /v1/booking/admin/bookings/:id/deposit`, butuh sesi) — menggantikan webhook tanpa berpura-pura ada gateway.
 - [x] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
 - [x] Reschedule oleh klien (batas: minimal `minNoticeHours` jam sebelumnya)
 - [x] Cancel oleh klien + kebijakan batas waktu
@@ -933,6 +933,15 @@ node e2e/phase10-license.e2e.mjs
 - [x] Export kalender `.ics`
 - [x] Rate-limit form publik + honeypot (anti spam, karena tanpa login)
 - [x] Halaman publik responsive + aksesibel (klien buka dari HP)
+
+**Kanal kirim email (2026-10-15)**
+
+- [x] `apps/api/src/smtp.ts` — klien SMTP sendiri (`node:net` + `node:tls`), **tanpa dependensi baru**: sapaan, `EHLO`, `STARTTLS`, `AUTH LOGIN`, `MAIL/RCPT/DATA`.
+- [x] **Kredensial tidak pernah lewat koneksi polos**: kalau server tidak mengiklankan `STARTTLS` di balasan `EHLO`, kiriman dibatalkan sebelum `AUTH` — bukan dikirim lalu ditolak.
+- [x] `smtpConfigFromEnv` — kosong = kanal log (`live: false`); setengah lengkap = **melempar saat start** (bukan diam-diam tidak mengirim). Default port: `465` → TLS implisit, `587` → STARTTLS.
+- [x] `delivered`/`reminded_at` tetap jujur: hanya ditandai kalau `email()` tidak melempar. Penolakan server (`550`, `554`) melempar dengan kodenya, jadi booking tidak pernah "dianggap sudah diingatkan".
+- [x] Env yang dibaca: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE`, `SMTP_STARTTLS`, `SMTP_TIMEOUT_MS`. Diteruskan ke container lewat `--env-file storage/foto-booth.env` yang sudah dipakai CI — **tanpa ubah workflow**.
+- [x] Tes `apps/api/src/smtp.test.ts` — 10 tes dengan server SMTP palsu di dalam satu `Duplex` (tanpa jaringan): urutan perintah, base64 `AUTH`, body, dan penolakan.
 
 **Kriteria terima (FEATURE-MATRIX):** §B semua baris dengan **Fase = 11** (modul Booking)
 
@@ -954,6 +963,7 @@ node e2e/phase11-booking.e2e.mjs
 - [x] Invoice: angka tagihan **dibandingkan dengan data booking yang sama** (harga, deposit, sisa) — bukan angka yang ditulis di tes (e2e langkah 29); tanpa sesi → `401` (langkah 30)
 - [x] Kwitansi `.txt` benar-benar terunduh sebagai teks polos dengan nomor invoice di nama berkas (e2e langkah 31)
 - [x] Notifikasi: `subject`/`body`/`whatsappUrl` selalu terbentuk, `kind` asing ditolak `400`, dan `delivered` **tidak** mengklaim terkirim saat kanal belum hidup (e2e langkah 32)
+- [x] Kanal SMTP: kredensial **tidak pernah** dikirim ke koneksi tanpa STARTTLS; server yang menolak (`550`/`554`) membuat kiriman gagal, bukan sukses palsu (`smtp.test.ts` 10 tes)
 - [x] Pengingat H-1: rute operator melaporkan `notifierLive` jujur dan hanya memuat sesi < 24 jam; tanpa sesi → `401` (e2e langkah 33–34; job-nya diuji di `booking.test.ts` dengan `runBookingReminders` dipanggil manual)
 - [x] Reschedule di bawah batas waktu → ditolak dengan pesan jelas (`too_soon`; tamu dan operator sama-sama kena)
 - [x] Approve → **record event benar-benar ada** dan bisa dipakai di studio (dibaca dari DB, bukan asumsi; reschedule menggeser tanggal event, tidak menggandakan)
@@ -961,7 +971,7 @@ node e2e/phase11-booking.e2e.mjs
 - [x] Ukur DOM: halaman booking di 390px — tidak ada elemen meluber (`scrollWidth <= clientWidth`, e2e langkah 17)
 - [ ] CI hijau + container healthy → dijalankan di gate deploy (b11)
 
-**Gate keluar:** ⛔ **belum terpenuhi** — yang tersisa hanya dua ketergantungan luar: **gateway QRIS** (deposit dari webhook) dan **kanal kirim email/WA** (SMTP/WA belum ada di infra). Mekanismenya sendiri sudah lengkap dan terbukti: alur booking→event, anti double-booking, token link, invoice + kwitansi, notifikasi + `whatsappUrl`, penandaan deposit manual, dan job pengingat H-1 dengan `reminded_at` yang hanya ditandai kalau pesan benar-benar keluar.
+**Gate keluar:** ⛔ **belum terpenuhi** — yang tersisa tinggal **satu** ketergantungan luar: **gateway QRIS** (deposit dari webhook), ditahan atas permintaan pemilik. Kanal kirim email **sudah sungguhan** (`apps/api/src/smtp.ts`, 2026-10-15): hidup begitu `SMTP_*` diisi di `storage/foto-booth.env`; tanpa itu jatuh ke log dan melaporkan `live: false`. Mekanismenya sendiri sudah lengkap dan terbukti: alur booking→event, anti double-booking, token link, invoice + kwitansi, notifikasi + `whatsappUrl`, penandaan deposit manual, dan job pengingat H-1 dengan `reminded_at` yang hanya ditandai kalau pesan benar-benar keluar.
 
 **Bukti** (2026-10-13, diperbarui 2026-10-14)
 
@@ -970,6 +980,9 @@ node e2e/phase11-booking.e2e.mjs
 - `node e2e/phase11-booking.e2e.mjs` → **34 langkah lulus** (API proses terpisah + Chromium sungguhan)
 - Dua bug nyata ditemukan & diperbaiki oleh e2e ini: (1) form publik tidak mengirim jam yang dipilih; (2) `FORM_SCRIPT` disisipkan ke `<head>` sehingga daftar paket tidak pernah termuat.
 - Stub pembayaran: provider `qris` **melempar** dan ditolak `400` di rute setelan — tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk.
+- Kanal SMTP (2026-10-15): `apps/api/src/smtp.test.ts` → **10/10 lulus** dengan server SMTP palsu (tangga perintah, `AUTH` base64, penolakan `550`/`554`, STARTTLS multi-baris, dot-stuffing, `smtpConfigFromEnv`). Tanpa jaringan keluar, tanpa dependensi baru.
+- Kanal SMTP end-to-end (2026-10-15): `e2e/phase11-smtp.e2e.mjs` → **4 langkah lulus**, API sungguhan (`src/index.ts`) + server SMTP palsu di `net.Server` **TCP sungguhan**. Approve booking mengirim konfirmasi nyata (`MAIL FROM` = `SMTP_FROM`, nama tamu terbaca di body base64 setelah di-decode); notifikasi manual melaporkan `delivered: true` + `channel: "email"` dan pesannya bertambah. Sisi sebaliknya juga diuji: API tanpa `SMTP_*` melaporkan `notifierLive: false` dan **tidak ada** pesan yang keluar — jadi "hidup" di atas bukan efek samping yang selalu menyala. 2 pesan diterima (konfirmasi + notifikasi manual).
+- Tes naik: api **196 → 206** (10 tes SMTP). Total gate: shared 232 · api 206 · studio 946 — 0 gagal.
 
 ---
 
