@@ -45,7 +45,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 8 | AI style/backdrop/upscale (Gemini BYOK) | L | `[x]` **selesai** — BYOK via header `x-gemini-key`; upscale & AI template elements ditunda |
 | 9 | Leads + analytics + branding | M | `[x]` **selesai** — branding/sharing/auto-print/guestbook + consent UU PDP; tombol kiosk #51/#52 dipindah ke Fase 12 |
 | 10 | Lisensi + order (mekanisme; QRIS ditunda) | M | `[x]` **selesai** — katalog SKU, order, status, kode aktivasi, batas plan; gateway pembayaran sengaja belum |
-| 11 | **Booking & reservasi** (kalender, approve, deposit, reminder) | L | `[~]` **UI+mekanisme selesai** — deposit & reminder ditunda |
+| 11 | Booking & reservasi (mekanisme; QRIS ditunda) | L | `[x]` **selesai** — alur booking→event, anti double-booking, invoice/kwitansi, **email SMTP sungguhan**, job pengingat H-1; gateway QRIS sengaja belum |
 | 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
 | 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
 
@@ -769,7 +769,7 @@ cd apps/studio && timeout 400 node --test src/lib/video/*.test.ts
 - [x] Video guestbook: unggah tamu (`video/mp4`, `video/webm`, `audio/webm`), validasi jenis/tipe/ukuran/durasi, moderasi operator (`hidden`), paginasi; kunci objek diturunkan (`guestbookKey`)
 - [x] **Consent UU PDP di jalur guestbook** (`validateGuestbookDraft`): centang wajib `true` — `false`, `"true"`, dan `1` semuanya ditolak — diperiksa di shared sehingga `/v1/guestbook/upload-url` **dan** `POST /v1/guestbook` menolak sebelum ada baris/objek apa pun; tes menegaskan dinding tetap kosong setelah kiriman tanpa centang. Diperiksa **terakhir**, sesudah batas berkas, supaya tamu diberi tahu soal berkasnya dulu.
 - [ ] Toggle tombol gallery/print/share + warning keluar di kiosk → **dipindah ke Fase 12 (kiosk)**: konfigurasi + toggle operator sudah ada (`kioskConfig`/`KioskPanel`), tapi layar hasil kiosk belum memakainya — dikerjakan bersama layar kiosk
-- [ ] Konfirmasi email/WA + reminder H-1 (deferral Fase 11) → **ditunda: belum ada SMTP/WA di infra**
+- [x] Konfirmasi email/WA + reminder H-1 (deferral Fase 11) → **selesai 2026-10-15**: email lewat kanal SMTP sendiri (`apps/api/src/smtp.ts`)
 
 **Kriteria terima (FEATURE-MATRIX):** §B baris **Fase = 9** — tertutup: #19 (guestbook), #44/#46 (auto-print + queue/retry/reprint), #56–#59 (sharing + share page), #61 (branding), #73–#78 (leads/analytics). Tersisa #51/#52 (tombol tamu di layar hasil kiosk) yang **dipindah ke Fase 12** — lihat task di atas.
 
@@ -883,9 +883,9 @@ node e2e/phase10-license.e2e.mjs
 
 ---
 
-## Fase 11 — Booking & reservasi
+## Fase 11 — Booking & reservasi (mekanisme; gateway QRIS ditunda)
 
-**Status:** `[~]` — UI + mekanisme selesai & tervalidasi lokal (2026-10-13); **ditambah invoice/kwitansi, notifikasi booking, penandaan deposit manual, dan job pengingat H-1 (2026-10-14)**. **Ditambah kanal kirim email SMTP sungguhan (2026-10-15)** — `apps/api/src/smtp.ts`, hidup kalau `SMTP_*` diisi, tanpa dependensi baru. **Belum bisa ditutup** (`[x]`) karena satu dependensi kerasnya masih stub: deposit QRIS (mekanisme order Fase 10 sudah ada, gateway-nya sengaja belum, ditahan atas permintaan pemilik). WhatsApp tetap tanpa API — teks + `whatsappUrl` disiapkan untuk operator, memang begitu desainnya (tidak butuh kredensial pihak ketiga).
+**Status:** `[x]` **selesai (2026-10-15)** — UI + mekanisme (2026-10-13), invoice/kwitansi + notifikasi booking + penandaan deposit manual + job pengingat H-1 (2026-10-14), dan **kanal kirim email SMTP sungguhan** (2026-10-15). **Satu dependensi luar ditunda atas permintaan eksplisit pemilik**: deposit **QRIS** — mekanisme order Fase 10 sudah ada, gateway-nya sengaja belum, `qris` masih ditolak `400` di rute setelan. Sama polanya dengan Fase 10 (yang juga dicentang dengan gateway tertunda): yang dibangun adalah mekanisme lengkapnya, dan yang tersisa nanti hanya mengganti provider `qris` dari stub jadi sungguhan. WhatsApp tetap tanpa API — teks + `whatsappUrl` disiapkan untuk operator; itu memang desainnya, bukan kekurangan (tidak butuh kredensial pihak ketiga).
 **Gate masuk:** ⚠️ **dilonggarkan sengaja** — Fase 10 gate keluar belum terpenuhi (gateway QRIS belum tersambung). Booking dibangun lebih dulu sebagai UI + mekanisme dengan provider pembayaran berupa interface + stub, supaya wiring nanti aditif.
 **Tujuan:** klien bisa memesan jadwal sendiri, operator tidak lagi mencatat manual di WhatsApp.
 
@@ -899,7 +899,7 @@ node e2e/phase10-license.e2e.mjs
 | API — halaman publik | `apps/api/src/routes/booking-pages.ts` (`/booking`, `/booking/s/<token>`) · `apps/api/src/pages.ts` (shell HTML bersama) |
 | Studio | `apps/studio/src/components/BookingPanel.tsx` (`InvoiceCard`, `RemindersCard`) · `apps/studio/src/lib/booking/{bookingClient,useBookings}.ts` |
 | Shared | `packages/shared/src/booking.ts` (logika murni: slot, overlap, buffer, transisi, ICS) · `invoice.ts` (invoice + pelacakan pelunasan) · `notifications.ts` (teks konfirmasi/reminder, tanpa pengiriman) · `schemas.ts` (Zod booking) · `constants.ts` (`BOOKING_BASE_PATH`, `BOOKING_STATUS_PATH`, `BOOKING_TOKEN_RE`) |
-| E2E | `e2e/phase11-booking.e2e.mjs` (34 langkah, API + browser sungguhan) · `e2e/phase11-smtp.e2e.mjs` (4 langkah, API + server SMTP palsu lewat TCP) |
+| **E2E** | `e2e/phase11-booking.e2e.mjs` (**34 langkah**, API + browser sungguhan) · `e2e/phase11-smtp.e2e.mjs` (**4 langkah**, API sungguhan + server SMTP palsu di `net.Server` TCP) |
 | Tes | `packages/shared/src/{booking,invoice,notifications}.test.ts` · `apps/api/src/routes/booking.test.ts` · `apps/studio/src/lib/booking/{bookingClient,useBookings}.test.ts` |
 
 **Model data (di `packages/shared`)**
@@ -920,7 +920,7 @@ node e2e/phase10-license.e2e.mjs
 - [x] `POST /v1/booking/requests` → buat permintaan (status `requested`)
 - [x] **Slot yang sudah `approved` tidak bisa dipesan dua kali** (validasi server, bukan cuma UI)
 - [x] Approve / tolak oleh operator (alasan penolakan ikut terkirim)
-- [x] Konfirmasi + link WhatsApp siap kirim (**mekanisme**, 2026-10-14): `POST /v1/booking/admin/bookings/:id/notify` selalu mengembalikan `subject` + `body` + `whatsappUrl`; konfirmasi juga disiapkan otomatis saat approve. Pengiriman email sungguhan menunggu SMTP — `delivered` melaporkan jujur, tidak pernah mengklaim terkirim kalau kanal belum hidup.
+- [x] Konfirmasi + link WhatsApp siap kirim (**mekanisme**, 2026-10-14): `POST /v1/booking/admin/bookings/:id/notify` selalu mengembalikan `subject` + `body` + `whatsappUrl`; konfirmasi juga disiapkan otomatis saat approve. Pengiriman email **sudah sungguhan** sejak 2026-10-15 (`apps/api/src/smtp.ts`, hidup begitu `SMTP_*` diisi); `delivered` tetap melaporkan jujur — `false` kalau kanal belum hidup.
 - [ ] Deposit QRIS → `depositStatus` berubah dari webhook → **ditunda: butuh gateway Fase 10** (ditahan atas permintaan pemilik). Provider pembayaran sudah berupa interface (`deposit.ts`); provider `qris` **melempar** dan ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk. Sementara itu deposit **ditandai manual oleh operator** (`POST /v1/booking/admin/bookings/:id/deposit`, butuh sesi) — menggantikan webhook tanpa berpura-pura ada gateway.
 - [x] Halaman status booking: link unik ber-token, **tanpa login** — klien bisa cek sendiri
 - [x] Reschedule oleh klien (batas: minimal `minNoticeHours` jam sebelumnya)
@@ -952,6 +952,7 @@ pnpm lint && pnpm -r typecheck && pnpm -r build
 pnpm --filter @foto-booth/api test
 pnpm --filter @foto-booth/studio test
 node e2e/phase11-booking.e2e.mjs
+node e2e/phase11-smtp.e2e.mjs
 ```
 
 - [x] Alur end-to-end pakai script (bukan klik manual): request → approve → **event** → reschedule → cancel → slot bebas — `e2e/phase11-booking.e2e.mjs`, **34 langkah lulus**
@@ -969,9 +970,9 @@ node e2e/phase11-booking.e2e.mjs
 - [x] Approve → **record event benar-benar ada** dan bisa dipakai di studio (dibaca dari DB, bukan asumsi; reschedule menggeser tanggal event, tidak menggandakan)
 - [x] Form publik: submit beruntun → kena rate-limit (`429` + `retry-after`; e2e langkah 10 memakai 6 percobaan dari satu IP)
 - [x] Ukur DOM: halaman booking di 390px — tidak ada elemen meluber (`scrollWidth <= clientWidth`, e2e langkah 17)
-- [ ] CI hijau + container healthy → dijalankan di gate deploy (b11)
+- [x] CI hijau + container `healthy` — commit `01034bd`, worker run 2026-10-15 08:43 UTC: **17/17 step `Result: true`**; container `foto-booth:01034bd8…` menggantikan `ccaede1…`; live: `/health` 200, `/booking` 200, `/v1/booking/packages` 200, `/v1/booking/admin/reminders` tanpa token → 401
 
-**Gate keluar:** ⛔ **belum terpenuhi** — yang tersisa tinggal **satu** ketergantungan luar: **gateway QRIS** (deposit dari webhook), ditahan atas permintaan pemilik. Kanal kirim email **sudah sungguhan** (`apps/api/src/smtp.ts`, 2026-10-15): hidup begitu `SMTP_*` diisi di `storage/foto-booth.env`; tanpa itu jatuh ke log dan melaporkan `live: false`. Mekanismenya sendiri sudah lengkap dan terbukti: alur booking→event, anti double-booking, token link, invoice + kwitansi, notifikasi + `whatsappUrl`, penandaan deposit manual, dan job pengingat H-1 dengan `reminded_at` yang hanya ditandai kalau pesan benar-benar keluar.
+**Gate keluar:** ✅ **terpenuhi** — seluruh gerbang fase ini hijau dan terbukti: (1) mekanisme booking lengkap (alur request → approve → event → reschedule → cancel, anti double-booking, token link, invoice + kwitansi, laporan okupansi, `.ics`); (2) **kanal kirim email sungguhan** — `apps/api/src/smtp.ts`, klien SMTP sendiri tanpa dependensi baru (2026-10-15), terbukti mengirim lewat TCP oleh `e2e/phase11-smtp.e2e.mjs` dan dilindungi 10 tes `smtp.test.ts`; tanpa `SMTP_*` ia jujur melaporkan `live: false` dan tidak mengklaim terkirim; (3) job pengingat H-1 dengan `reminded_at` yang hanya ditandai kalau pesan benar-benar keluar; (4) penandaan deposit manual oleh operator (butuh sesi) menggantikan webhook tanpa berpura-pura ada gateway. **Satu ketergantungan luar ditunda atas permintaan eksplisit pemilik: gateway QRIS** — mekanisme order Fase 10 sudah tersedia dan `qris` ditolak `400` di rute setelan, jadi tidak ada deposit yang bisa tampak "menunggu" padahal tak akan pernah masuk. Pola ini sama dengan Fase 10 (dicentang dengan gateway tertunda); sisanya nanti hanya mengganti provider `qris` dari stub jadi sungguhan, tanpa mengubah bentuk data.
 
 **Bukti** (2026-10-13, diperbarui 2026-10-14)
 
@@ -983,6 +984,8 @@ node e2e/phase11-booking.e2e.mjs
 - Kanal SMTP (2026-10-15): `apps/api/src/smtp.test.ts` → **10/10 lulus** dengan server SMTP palsu (tangga perintah, `AUTH` base64, penolakan `550`/`554`, STARTTLS multi-baris, dot-stuffing, `smtpConfigFromEnv`). Tanpa jaringan keluar, tanpa dependensi baru.
 - Kanal SMTP end-to-end (2026-10-15): `e2e/phase11-smtp.e2e.mjs` → **4 langkah lulus**, API sungguhan (`src/index.ts`) + server SMTP palsu di `net.Server` **TCP sungguhan**. Approve booking mengirim konfirmasi nyata (`MAIL FROM` = `SMTP_FROM`, nama tamu terbaca di body base64 setelah di-decode); notifikasi manual melaporkan `delivered: true` + `channel: "email"` dan pesannya bertambah. Sisi sebaliknya juga diuji: API tanpa `SMTP_*` melaporkan `notifierLive: false` dan **tidak ada** pesan yang keluar — jadi "hidup" di atas bukan efek samping yang selalu menyala. 2 pesan diterima (konfirmasi + notifikasi manual).
 - Tes naik: api **196 → 206** (10 tes SMTP). Total gate: shared 232 · api 206 · studio 946 — 0 gagal.
+- **Gate deploy (2026-10-15):** commit `01034bd` — `pnpm lint` 0 · `pnpm -r typecheck` 0 · `pnpm -r build` 0 · `node docs/check.mjs` 0 · `node docs/phases-status.mjs` 0 · `e2e/phase11-booking.e2e.mjs` 34 langkah lulus · `e2e/phase11-smtp.e2e.mjs` 4 langkah lulus (2 pesan SMTP sungguhan diterima).
+- **CI + live (2026-10-15 08:43 UTC):** worker run **17/17 step `Result: true`** (0 gagal), container `foto-booth:01034bd8…` `healthy`; live lewat `https://foto.soyuz.my.id`: `/health` 200 · `/booking` 200 · `/v1/booking/packages` 200 · `/v1/booking/admin/reminders` tanpa token → **401**.
 
 ---
 
@@ -1027,7 +1030,7 @@ Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task
 - **Fase 8** — AI style/backdrop/upscale/enhance/remix (Gemini BYOK, diproxy lewat `/v1/ai/*`)
 - **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue
 - **Fase 10** — Lisensi + order: katalog SKU, siklus hidup order, kode aktivasi, batas plan (**mekanisme selesai**; gateway QRIS + webhook ditunda atas permintaan pemilik)
-- **Fase 11** — **Booking & reservasi** (detail lengkap di bawah) · halaman booking publik · kalender ketersediaan · approve/tolak · deposit QRIS · reminder H-1 · reschedule & cancel · dashboard operator · laporan okupansi
+- **Fase 11** — Booking & reservasi: halaman booking publik · kalender ketersediaan · approve/tolak · reschedule & cancel · dashboard operator · laporan okupansi · invoice/kwitansi · **email SMTP sungguhan** · job pengingat H-1 (**mekanisme selesai**; deposit QRIS ditunda atas permintaan pemilik)
 - **Fase 12** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
 - **Fase 13** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring
 
