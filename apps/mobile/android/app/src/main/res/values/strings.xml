@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Foto Booth</string>
+    <string name="title_activity_main">Foto Booth</string>
+    <string name="package_name">id.soyuz.fotobooth</string>
+    <string name="custom_url_scheme">id.soyuz.fotobooth</string>
+</resources>

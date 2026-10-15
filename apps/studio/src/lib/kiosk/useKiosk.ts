@@ -40,6 +40,7 @@ import {
 } from "./kioskConfig.ts";
 import { createPinRecord, verifyPin, type PinCrypto, type PinRecord } from "./pin.ts";
 import { clearPinRecord, hasPin, loadPinRecord, savePinRecord } from "./pinStore.ts";
+import { exitWarningReason, type ExitWarningReason } from "./resultActions.ts";
 import { createWakeLock, type WakeLockController, type WakeLockState } from "./wakeLock.ts";
 
 export interface KioskDeps {
@@ -143,12 +144,31 @@ export interface UseKioskResult {
   secureContext: boolean;
   /** true kalau PIN diminta tapi belum ada — kiosk tidak bisa ditinggal aman. */
   pinMissingWarning: boolean;
+  /**
+   * Sesi foto sedang berjalan (dipegang panel capture lewat `hold()`).
+   *
+   * Bukan turunan dari `idle.suspended`: aktivitas pointer apa pun memulai ulang
+   * hitungan idle **dan** melepas suspend, jadi menyimpulkan "sesi jalan" dari
+   * situ akan salah begitu ada satu sentuhan di tengah sesi.
+   */
+  sessionRunning: boolean;
+  /** Ada foto sesi yang sudah disimpan tapi masih bisa hilang dari layar tamu. */
+  hasSaved: boolean;
+  /**
+   * Peringatan keluar yang menunggu jawaban operator, atau `null`.
+   * Terisi hanya kalau keluar sekarang akan membuang pekerjaan (#52).
+   */
+  exitWarning: ExitWarningReason | null;
   enable: () => Promise<void>;
   disable: () => Promise<void>;
-  /** Coba keluar: minta PIN kalau diwajibkan, kalau tidak langsung matikan. */
+  /** Coba keluar: peringatkan dulu kalau ada pekerjaan, lalu minta PIN. */
   requestExit: () => void;
+  /** Operator memilih tetap keluar dari peringatan. */
+  confirmExit: () => void;
   /** Batal dari prompt PIN. */
   cancelExit: () => void;
+  /** Tutup peringatan keluar tanpa keluar. */
+  cancelExitWarning: () => void;
   setPin: (pin: string) => Promise<void>;
   clearPin: () => void;
   /** Verifikasi PIN lalu buka kunci. Mengembalikan `true` kalau cocok. */
@@ -165,6 +185,18 @@ export interface UseKioskResult {
   /** Tahan reset idle selama sesi foto. */
   hold: () => void;
   release: () => void;
+  /** Panel capture melaporkan ada foto yang sudah disimpan di sesi ini. */
+  noteSaved: () => void;
+  /** Sesi baru mulai / layar sudah direset: tidak ada lagi yang bisa hilang. */
+  clearSaved: () => void;
+  /**
+   * Tamu selesai: layar kembali ke tarik sekarang, bukan menunggu timeout idle.
+   *
+   * Memakai jalur `reset-idle` yang sama dengan timeout supaya hanya ada satu
+   * cara kembali ke layar tarik; kalau `tapToStart` mati, `armed` memang harus
+   * tetap menyala.
+   */
+  disarm: () => void;
 }
 
 export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
@@ -200,6 +232,11 @@ export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
   );
   const [locked, setLocked] = useState(false);
   const [pinConfigured, setPinConfigured] = useState(() => hasPin());
+  // Sesi foto & foto yang sudah tersimpan dilaporkan panel capture. Keduanya
+  // dipakai untuk memutuskan apakah keluar perlu peringatan (#52).
+  const [sessionRunning, setSessionRunning] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [exitWarning, setExitWarning] = useState<ExitWarningReason | null>(null);
   const [wakeState, setWakeState] = useState<WakeLockState>(() => wakeLock.state());
   const [status, setStatus] = useState<IdleStatus>(() =>
     idleStatus(state.config.idle, initialIdleState(now()), now()),
@@ -312,16 +349,57 @@ export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
     await fullscreenController.exit();
     await wakeLock.release();
     setLocked(false);
+    setExitWarning(null);
+    setSessionRunning(false);
+    setSavedCount(0);
   }, [persist, fullscreenController, wakeLock]);
 
-  const requestExit = useCallback(() => {
-    const config = configRef.current;
-    if (config.requirePinOnExit && pinConfigured) {
+  /**
+   * Lanjut keluar: minta PIN dulu kalau diwajibkan, kalau tidak langsung matikan.
+   *
+   * Dipisah dari `requestExit` supaya peringatan #52 bisa disisipkan di
+   * depannya tanpa menduplikasi jalur PIN.
+   */
+  const proceedExit = useCallback(() => {
+    if (configRef.current.requirePinOnExit && pinConfigured) {
       setLocked(true);
       return;
     }
     void disable();
   }, [pinConfigured, disable]);
+
+  /**
+   * Keluar dengan peringatan dulu kalau ada yang bisa hilang (#52).
+   *
+   * Tombol keluar itu kecil dan ada di sudut layar sentuh: satu ketukan jari
+   * yang salah di tengah sesi membuang frame yang belum diterima. Peringatan
+   * hanya muncul saat memang ada pekerjaan — kalau layar masih di tarik atau
+   * tidak ada foto tersimpan, keluar langsung seperti sebelumnya.
+   */
+  const requestExit = useCallback(() => {
+    const config = configRef.current;
+    const reason = exitWarningReason({
+      enabled: config.enabled,
+      showAttract: config.enabled && config.tapToStart && !state.armed,
+      locked,
+      sessionRunning,
+      hasSaved: savedCount > 0,
+    });
+
+    if (reason !== null) {
+      setExitWarning(reason);
+      return;
+    }
+
+    proceedExit();
+  }, [state.armed, locked, sessionRunning, savedCount, proceedExit]);
+
+  const confirmExit = useCallback(() => {
+    setExitWarning(null);
+    proceedExit();
+  }, [proceedExit]);
+
+  const cancelExitWarning = useCallback(() => setExitWarning(null), []);
 
   const cancelExit = useCallback(() => setLocked(false), []);
 
@@ -396,8 +474,29 @@ export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
     [persist],
   );
 
-  const hold = useCallback(() => dispatch({ type: "suspend", now: now() }), [now]);
-  const release = useCallback(() => dispatch({ type: "resume", now: now() }), [now]);
+  const hold = useCallback(() => {
+    dispatch({ type: "suspend", now: now() });
+    setSessionRunning(true);
+  }, [now]);
+
+  const release = useCallback(() => {
+    dispatch({ type: "resume", now: now() });
+    setSessionRunning(false);
+  }, [now]);
+
+  /** Panel capture: satu foto lagi sudah disimpan di sesi ini. */
+  const noteSaved = useCallback(() => setSavedCount((n) => n + 1), []);
+
+  /** Sesi baru mulai / layar sudah direset — tidak ada lagi yang bisa hilang. */
+  const clearSaved = useCallback(() => setSavedCount(0), []);
+
+  /** Tamu selesai: kembali ke layar tarik tanpa menunggu timeout idle. */
+  const disarm = useCallback(() => {
+    dispatch({ type: "reset-idle", now: now() });
+    previousStatus.current = null;
+    setSavedCount(0);
+    setSessionRunning(false);
+  }, [now]);
 
   const secureContext = useMemo(() => typeof window !== "undefined" && window.isSecureContext, []);
 
@@ -418,10 +517,15 @@ export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
     buttons: state.config.buttons,
     secureContext,
     pinMissingWarning: state.config.requirePinOnExit && !pinConfigured,
+    sessionRunning,
+    hasSaved: savedCount > 0,
+    exitWarning,
     enable,
     disable,
     requestExit,
+    confirmExit,
     cancelExit,
+    cancelExitWarning,
     setPin,
     clearPin,
     unlock,
@@ -434,6 +538,9 @@ export function useKiosk(deps: KioskDeps = {}): UseKioskResult {
     setButton,
     hold,
     release,
+    noteSaved,
+    clearSaved,
+    disarm,
   };
 }
 

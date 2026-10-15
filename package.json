@@ -19,7 +19,10 @@
     "test:e2e:leads": "node e2e/phase9-leads.e2e.mjs",
     "test:e2e:license": "node e2e/phase10-license.e2e.mjs",
     "test:e2e:booking": "node e2e/phase11-booking.e2e.mjs",
-    "test:e2e:smtp": "node e2e/phase11-smtp.e2e.mjs"
+    "test:e2e:smtp": "node e2e/phase11-smtp.e2e.mjs",
+    "test:e2e:desktop": "node e2e/phase12-desktop.e2e.mjs",
+    "test:e2e:mobile": "node e2e/phase12-mobile.e2e.mjs",
+    "test:e2e:kiosk": "node e2e/phase12-kiosk.e2e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",

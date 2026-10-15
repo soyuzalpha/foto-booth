@@ -180,6 +180,7 @@
     "share": "Bagikan",
     "guestbook": "Guestbook",
     "print": "Antrean cetak",
+    "printer": "Printer & diagnostik",
     "license": "Lisensi"
   },
   "template": {
@@ -280,7 +281,25 @@
     "attractBody": "Sentuh layar untuk mulai. Ikuti hitungan, lalu ambil pose.",
     "attractCta": "Mulai",
     "warningBody": "Masih di sini? Layar akan kembali ke awal dalam {{seconds}} detik.",
-    "warningKeep": "Masih di sini"
+    "warningKeep": "Masih di sini",
+    "exitWarningTitle": "Keluar dari kiosk?",
+    "exitWarningSession": "Sesi foto masih berjalan atau masih ada foto yang belum selesai disimpan. Keluar sekarang membuang pekerjaan itu.",
+    "exitWarningIdle": "Kiosk akan dimatikan: layar penuh dilepas dan layar tidak lagi dijaga tetap menyala.",
+    "exitWarningCancel": "Tetap di kiosk",
+    "exitWarningConfirm": "Keluar",
+    "resultTitle": "Selesai!",
+    "resultBody": "Fotonya sudah tersimpan. Pilih salah satu tombol di bawah.",
+    "resultNoActions": "Operator belum menyalakan tombol tamu. Tekan Selesai untuk mengakhiri sesi.",
+    "resultPrint": "Cetak foto",
+    "resultPrinting": "Mencetak…",
+    "resultPrinted": "Sedang dicetak — ambil hasilnya di printer.",
+    "resultPrintFailed": "Cetak gagal: {{message}}",
+    "resultGallery": "Lihat galeri",
+    "resultShare": "Kirim ke ponsel",
+    "resultDone": "Selesai",
+    "resultNoGallery": "Belum ada galeri aktif — tanya operator.",
+    "resultQrAlt": "Kode QR galeri",
+    "resultQrHint": "Pindai dengan kamera ponsel untuk membuka galeri."
   },
   "gallery": {
     "title": "Galeri tamu",
@@ -603,6 +622,10 @@
     "clear": "Bersihkan yang selesai",
     "empty": "Antrean kosong. Auto-print yang menyala akan mengisi ini sendiri saat sesi selesai.",
     "sheets": "lembar keluar",
+    "routeDesktop": "Jalur cetak: desktop — {{name}} ({{silent}})",
+    "routeBrowser": "Jalur cetak: dialog browser",
+    "silentOn": "tanpa dialog",
+    "silentOff": "dengan dialog",
     "copies": "{{count}} salinan",
     "attempts": "{{count}} percobaan",
     "reprintOf": "reprint dari #{{seq}}",
@@ -676,5 +699,30 @@
       "noCode": "—",
       "settled": "Selesai"
     }
+  },
+  "printer": {
+    "title": "Printer & diagnostik",
+    "subtitle": "Pilih printer yang dipakai auto-print, dan lihat apa yang terdeteksi. Pilihan ini bertahan setelah halaman dimuat ulang.",
+    "chosen": "Printer terpakai",
+    "loading": "Mendeteksi…",
+    "none": "Belum ada printer terdeteksi — cek kabel dan driver.",
+    "chosenMissing": "Printer yang dulu dipilih tidak terdeteksi sekarang. Pilih ulang di bawah, atau sambungkan lagi perangkatnya.",
+    "select": "Printer",
+    "systemDefault": "Ikut bawaan sistem",
+    "defaultTag": "bawaan",
+    "silent": "Cetak tanpa dialog (kiosk)",
+    "silentOnlyDesktop": "Cetak tanpa dialog hanya tersedia di aplikasi desktop.",
+    "refresh": "Deteksi ulang",
+    "transport": "Jalur"
+  },
+  "diagnostics": {
+    "title": "Diagnostik perangkat",
+    "readiness": "Kesiapan",
+    "allPresent": "Semua kemampuan yang dibutuhkan tersedia.",
+    "missing": "Tidak ada: {{name}}",
+    "build": "Buat laporan",
+    "copy": "Salin laporan",
+    "copied": "Tersalin",
+    "save": "Simpan berkas"
   }
 }

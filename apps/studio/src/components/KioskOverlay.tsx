@@ -81,6 +81,41 @@ export default function KioskOverlay({ kiosk }: Props): React.JSX.Element | null
         </button>
       )}
 
+      {/* Peringatan keluar (#52). Sengaja tidak pernah muncul saat layar tarik
+          tampil atau PIN sudah terbuka: di dua keadaan itu tidak ada pekerjaan
+          yang bisa hilang, dan `exitWarningReason` sudah memutuskan begitu. */}
+      {kiosk.exitWarning !== null && !kiosk.locked && (
+        <div className="kiosk-lock" data-testid="kiosk-exit-warning">
+          <div className="kiosk-lock-in">
+            <h2>{t("kiosk.exitWarningTitle")}</h2>
+            <p data-testid="kiosk-exit-warning-body">
+              {kiosk.exitWarning === "session"
+                ? t("kiosk.exitWarningSession")
+                : t("kiosk.exitWarningIdle")}
+            </p>
+
+            <div className="field-row kiosk-exit-warning-actions">
+              <button
+                className="btn"
+                type="button"
+                data-testid="kiosk-exit-warning-cancel"
+                onClick={kiosk.cancelExitWarning}
+              >
+                {t("kiosk.exitWarningCancel")}
+              </button>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                data-testid="kiosk-exit-warning-confirm"
+                onClick={kiosk.confirmExit}
+              >
+                {t("kiosk.exitWarningConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {kiosk.locked && (
         <div className="kiosk-lock" data-testid="kiosk-lock">
           <div className="kiosk-lock-in">

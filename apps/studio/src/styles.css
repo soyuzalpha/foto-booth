@@ -690,6 +690,37 @@ h1 { font-size: clamp(20px, 2.4vw, 26px); }
 .kiosk-key-wide { grid-column: span 1; font-size: 13px; letter-spacing: .04em; }
 .kiosk-submit { width: 100%; }
 
+/* ── layar hasil tamu (#51) ───────────────────────────────
+   Menutupi seluruh layar seperti layar tarik: setelah sesi diterima, tamu tidak
+   perlu melihat panel operator di belakangnya. Tombolnya besar karena dipakai
+   jari, bukan kursor. */
+.kiosk-result {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  text-align: center;
+  padding: 28px;
+  overflow-y: auto;
+}
+.kiosk-result-in { max-width: 640px; display: grid; gap: 18px; justify-items: center; }
+.kiosk-result h1 { margin: 0; font-size: clamp(28px, 5vw, 50px); line-height: 1.05; }
+.kiosk-result p { margin: 0; font-size: clamp(15px, 2.2vw, 19px); }
+.kiosk-result-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+.kiosk-result-btn { font-size: clamp(16px, 2.4vw, 21px); padding: 20px 18px; }
+.kiosk-result-done { grid-column: 1 / -1; }
+.kiosk-result-qr { display: grid; gap: 8px; justify-items: center; }
+.kiosk-result-qr img { border: var(--line); background: var(--white); }
+.kiosk-exit-warning-actions { justify-content: center; }
+
 /* Saat kiosk aktif, isi aplikasi yang tidak dipakai tamu disembunyikan. */
 .app.is-kiosk .main > .eyebrow,
 .app.is-kiosk .main > h1,

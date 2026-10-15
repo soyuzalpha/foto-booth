@@ -1,5 +1,5 @@
 /**
- * Panel antrean cetak (Fase 9, FEATURE-MATRIX #44 & #46).
+ * Panel antrean cetak (Fase 9, FEATURE-MATRIX #44 & #46 · Fase 12, #45/#80/#88).
  *
  * Yang ditampilkan di sini bukan sekadar daftar tugas. Auto-print berarti kiosk
  * mencetak tanpa operator menyentuh apa pun; kalau ada lembar yang tidak keluar,
@@ -13,14 +13,21 @@
  * Panel **tidak** memilih gambar sendiri: `PrintJob` di `packages/shared`
  * sengaja tidak membawa blob. Gambar ditempelkan lewat `registerImage`, dan
  * pencetak bisa diganti lewat prop `print` (dipakai tes & integrasi kiosk).
+ *
+ * **Sejak Fase 12 panel memilih pencetaknya sendiri.** Tanpa prop `print`, ia
+ * memakai `desktopPrinter`: jalur Electron (printer bernama, tanpa dialog) kalau
+ * jembatan desktopnya ada, dan jatuh ke iframe browser kalau tidak. Prop `print`
+ * tetap menang supaya tes dan panel debug tidak pernah benar-benar mencetak.
  */
 
 import { useTranslation } from "react-i18next";
 
 import type { PrintJob, PrintJobStatus } from "@foto-booth/shared";
 
-import { usePrintQueue } from "../lib/print/usePrintQueue.ts";
+import { browserPrinter, usePrintQueue } from "../lib/print/usePrintQueue.ts";
 import type { PrintFn } from "../lib/print/printQueueRunner.ts";
+import { desktopPrinter } from "../lib/print/desktopPrinter.ts";
+import { desktopBridge, usePrinters } from "../lib/print/usePrinters.ts";
 
 const STATUS_ORDER: readonly PrintJobStatus[] = ["printing", "queued", "failed", "done"];
 
@@ -69,10 +76,36 @@ function JobRow({
 
 export default function PrintQueuePanel({ print }: { print?: PrintFn }): React.JSX.Element {
   const { t } = useTranslation();
-  const queue = usePrintQueue(print === undefined ? {} : { print });
+
+  // Printer yang dipilih operator di panel Printer & diagnostik. Dibaca di sini
+  // supaya cetakan benar-benar menuju printer itu, bukan printer bawaan sistem.
+  const printers = usePrinters();
+
+  const queue = usePrintQueue(
+    print !== undefined
+      ? { print }
+      : {
+          makePrint: (resolveImage) =>
+            desktopPrinter({
+              bridge: desktopBridge(),
+              getTransport: () => printers.transport,
+              getDeviceName: () =>
+                printers.chosen === null ? null : printers.chosen.name,
+              getSilent: () => printers.preference.silent,
+              resolveImage,
+              fallback: browserPrinter(resolveImage),
+            }),
+        },
+  );
 
   const jobs = queue.jobs.slice().sort(byAttention);
   const summary = queue.summary;
+
+  const viaDesktop =
+    print === undefined &&
+    printers.transport === "electron" &&
+    printers.chosen !== null &&
+    desktopBridge() !== null;
 
   return (
     <section className="panel" data-testid="print-panel">
@@ -89,6 +122,15 @@ export default function PrintQueuePanel({ print }: { print?: PrintFn }): React.J
       </header>
 
       {queue.error !== null && <p className="error">{queue.error}</p>}
+
+      <p className="muted" data-testid="print-route">
+        {viaDesktop
+          ? t("print.routeDesktop", {
+              name: printers.chosen?.name ?? "",
+              silent: printers.preference.silent ? t("print.silentOn") : t("print.silentOff"),
+            })
+          : t("print.routeBrowser")}
+      </p>
 
       <div className="print-summary" data-testid="print-summary">
         {STATUS_ORDER.map((status) => (

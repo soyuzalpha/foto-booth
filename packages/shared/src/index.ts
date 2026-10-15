@@ -14,3 +14,5 @@ export * from "./printQueue.ts";
 export * from "./license.ts";
 export * from "./notifications.ts";
 export * from "./invoice.ts";
+export * from "./printer.ts";
+export * from "./diagnostics.ts";

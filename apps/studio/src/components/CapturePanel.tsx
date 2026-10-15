@@ -24,6 +24,10 @@ import type { CaptureErrorCode } from "../lib/transports/errors.ts";
 import { framesToIntake } from "../lib/upload/composedToIntake.ts";
 import { makeThumb } from "../lib/upload/makeThumb.ts";
 import { useCaptureSession } from "../lib/useCaptureSession.ts";
+import KioskResultScreen from "./KioskResultScreen.tsx";
+import { shouldShowResultScreen } from "../lib/kiosk/resultActions.ts";
+import { useKioskResultPrint } from "../lib/kiosk/useKioskResultPrint.ts";
+import type { UseKioskResult } from "../lib/kiosk/useKiosk.ts";
 import {
   SLIDESHOW_FRAME_MS_LIMITS,
   SLOW_MO_FACTORS,
@@ -115,6 +119,23 @@ function withCurrent(options: readonly number[], current: number): number[] {
 const RUNNING_STATES = new Set(["countdown", "shutter", "capturing", "processing", "composed"]);
 
 /**
+ * State yang berarti **tamu sedang mengerjakan sesuatu**.
+ *
+ * Lebih lebar dari `RUNNING_STATES`: `armed` dan `review` tidak mengunci
+ * setelan operator, tapi tetap berarti ada sesi hidup yang bisa hilang kalau
+ * kiosk dimatikan di tengahnya. Untuk peringatan keluar (#52) itu yang penting.
+ */
+const SESSION_STATES = new Set([
+  "armed",
+  "countdown",
+  "shutter",
+  "capturing",
+  "review",
+  "processing",
+  "composed",
+]);
+
+/**
  * Nilai untuk opsi "belum ada kamera dipilih".
  *
  * Sengaja **bukan** string kosong: sebelum izin kamera diberikan, browser
@@ -125,12 +146,24 @@ const RUNNING_STATES = new Set(["countdown", "shutter", "capturing", "processing
  */
 const DEVICE_NONE = "__none__";
 
-export default function CapturePanel(): React.JSX.Element {
+interface CapturePanelProps {
+  /**
+   * Handle kiosk dari `useKiosk`.
+   *
+   * `null`/absen = panel dipakai di luar mode kiosk (operator biasa, tes).
+   * Tanpa kiosk, panel tetap berfungsi penuh — hanya tidak melaporkan sesi ke
+   * peringatan keluar dan tidak menampilkan layar hasil tamu.
+   */
+  kiosk?: UseKioskResult | null;
+}
+
+export default function CapturePanel({ kiosk = null }: CapturePanelProps = {}): React.JSX.Element {
   const { t } = useTranslation();
   const capture = useCaptureSession();
   const filters = useFilterSettings();
   const { state, session, frames } = capture;
   const { intake, active, session: operatorSession } = useGallery();
+  const resultPrint = useKioskResultPrint();
   // Efek AI (Fase 8). BYOK: kunci milik operator disimpan di perangkatnya, dan
   // token sesi operator dipakai sebagai tiket masuk ke proxy di server rumah.
   const ai = useAiSettings({ token: operatorSession?.token ?? null });
@@ -219,52 +252,113 @@ export default function CapturePanel(): React.JSX.Element {
   const settingsLocked = RUNNING_STATES.has(currentState);
 
   /**
+   * Laporkan ke kiosk bahwa tamu sedang di tengah sesi.
+   *
+   * Dipakai peringatan keluar (#52): keluar saat sesi hidup membuang frame yang
+   * belum diterima. `hold()`/`release()` sekaligus menahan reset idle selama
+   * sesi, jadi pelaporan ini menumpang jalur yang sama — bukan jalur kedua yang
+   * bisa tidak sinkron.
+   */
+  const kioskHold = kiosk?.hold;
+  const kioskRelease = kiosk?.release;
+  useEffect(() => {
+    if (kioskHold === undefined || kioskRelease === undefined) return;
+    if (!SESSION_STATES.has(currentState)) return;
+
+    kioskHold();
+    return () => kioskRelease();
+  }, [currentState, kioskHold, kioskRelease]);
+
+  /**
    * Terima hasil sesi, lalu simpan: arsip lokal dulu, baru antrian upload.
    *
    * `accept()` dipanggil lebih dulu supaya alur sesi tidak tertahan menunggu
    * disk — operator bisa langsung menyiapkan sesi berikutnya. Frame-nya masih
    * hidup di sesi (blob tidak dibuang saat accept), jadi urutannya aman.
+   *
+   * `markProcessed()` **wajib** dipanggil di akhir, apa pun hasil simpannya.
+   * Tanpa itu state machine berhenti di `processing` selamanya: setelan
+   * terkunci, tombol "Selesai & lanjut" mati, dan layar hasil kiosk tidak
+   * pernah muncul. Sesi yang gagal disimpan tetap selesai diproses — kegagalan
+   * dilaporkan lewat pesan, bukan dengan menahan tamu di layar "memproses".
    */
   const onAccept = async (): Promise<void> => {
     const source = capture.session;
     capture.accept();
     if (source === null) return;
 
-    /**
-     * Urutan efek: filter dulu, baru AI.
-     *
-     * Alasannya bukan selera: filter adalah koreksi deterministik pada foto
-     * (rotasi, kroma, koreksi warna) yang operator lihat di layar saat menjepret.
-     * AI bekerja paling baik pada foto yang sudah lurus dan terwarnai benar —
-     * dan kalau AI gagal, yang disimpan adalah hasil filter, bukan foto mentah.
-     */
-    const processPhoto = async (blob: Blob) => {
-      let current = blob;
-      const filtered = await filters.process(blob);
-      if (filtered !== null && filtered.blob.size > 0) current = filtered.blob;
+    try {
+      /**
+       * Urutan efek: filter dulu, baru AI.
+       *
+       * Alasannya bukan selera: filter adalah koreksi deterministik pada foto
+       * (rotasi, kroma, koreksi warna) yang operator lihat di layar saat menjepret.
+       * AI bekerja paling baik pada foto yang sudah lurus dan terwarnai benar —
+       * dan kalau AI gagal, yang disimpan adalah hasil filter, bukan foto mentah.
+       */
+      const processPhoto = async (blob: Blob) => {
+        let current = blob;
+        const filtered = await filters.process(blob);
+        if (filtered !== null && filtered.blob.size > 0) current = filtered.blob;
 
-      const styled = await ai.process(current);
-      if (styled === null) {
-        // AI mati/gagal → hasil filter (atau blob asli) yang disimpan.
-        return filtered;
+        const styled = await ai.process(current);
+        if (styled === null) {
+          // AI mati/gagal → hasil filter (atau blob asli) yang disimpan.
+          return filtered;
+        }
+        return styled;
+      };
+
+      const photos = await framesToIntake(source.frames(), {
+        makeThumb,
+        // Filter & AI dijalankan sebelum thumbnail: yang diunggah & yang tampil di
+        // galeri harus foto yang sudah difilter, bukan versi mentahnya.
+        process: processPhoto,
+      });
+      const summary = await intake(photos);
+
+      if (summary.error !== null) {
+        setSavedNote(t("capture.saveFailed", { message: summary.error }));
+      } else {
+        setSavedNote(t("capture.saved", { count: summary.queued }));
+        // Ada foto yang benar-benar tersimpan: keluar kiosk sekarang akan
+        // membuang hasil ini (#52).
+        kiosk?.noteSaved();
       }
-      return styled;
-    };
-
-    const photos = await framesToIntake(source.frames(), {
-      makeThumb,
-      // Filter & AI dijalankan sebelum thumbnail: yang diunggah & yang tampil di
-      // galeri harus foto yang sudah difilter, bukan versi mentahnya.
-      process: processPhoto,
-    });
-    const summary = await intake(photos);
-
-    if (summary.error !== null) {
-      setSavedNote(t("capture.saveFailed", { message: summary.error }));
-    } else {
-      setSavedNote(t("capture.saved", { count: summary.queued }));
+    } finally {
+      capture.markProcessed();
     }
   };
+
+  /**
+   * Sesi baru dari sisi operator: buang penanda "ada foto tersimpan" milik
+   * kiosk — sesi yang bisa hilang itu sudah selesai.
+   */
+  const onNewSession = (): void => {
+    kiosk?.clearSaved();
+    capture.newSession();
+  };
+
+  /**
+   * Tamu selesai di layar hasil: kembali ke layar tarik sekarang.
+   *
+   * Urutannya penting. Sesi direset **dulu** supaya layar hasil hilang, baru
+   * kiosk di-`disarm` supaya layar tarik muncul. Kalau dibalik, ada satu render
+   * di mana layar tarik sudah tampil tapi sesi lama masih `composed` — layar
+   * hasil menumpuk di atas layar tarik.
+   */
+  const onResultDone = (): void => {
+    capture.newSession();
+    kiosk?.disarm();
+  };
+
+  // Layar hasil tamu hanya muncul di kiosk, setelah sesi diterima, dan tidak
+  // saat operator sedang membuka kunci lewat PIN (layar itu milik operator).
+  const showResultScreen = shouldShowResultScreen({
+    kioskEnabled: kiosk?.enabled === true,
+    finished: currentState === "composed",
+    unlocked: kiosk?.locked === true,
+  });
 
   return (
     <section className="capture" aria-labelledby="capture-title">
@@ -339,7 +433,11 @@ export default function CapturePanel(): React.JSX.Element {
           </div>
 
           <div className="preview-meta">
-            <span className={`pill ${currentState === "stalled" ? "pill-off" : "pill-on"}`}>
+            <span
+              className={`pill ${currentState === "stalled" ? "pill-off" : "pill-on"}`}
+              data-testid="capture-state"
+              data-state={currentState}
+            >
               {t(STATE_LABEL[currentState] ?? "capture.stateIdle")}
             </span>
             <span>
@@ -470,7 +568,7 @@ export default function CapturePanel(): React.JSX.Element {
             <button className="btn btn-ghost btn-small" type="button" onClick={capture.reset}>
               {t("capture.reset")}
             </button>
-            <button className="btn btn-ghost btn-small" type="button" onClick={capture.newSession}>
+            <button className="btn btn-ghost btn-small" type="button" onClick={onNewSession}>
               {t("capture.newSession")}
             </button>
           </div>
@@ -1147,6 +1245,18 @@ export default function CapturePanel(): React.JSX.Element {
           );
         })}
       </div>
+
+      {/* Layar hasil tamu (#51). Menumpuk di atas panel: tamu tidak perlu
+          melihat tombol operator, dan panel tetap hidup di belakangnya supaya
+          operator bisa mengambil alih tanpa memuat ulang. */}
+      {showResultScreen && kiosk !== null && (
+        <KioskResultScreen
+          buttons={kiosk.buttons}
+          galleryUrl={active?.url ?? null}
+          onPrint={resultPrint.print}
+          onDone={onResultDone}
+        />
+      )}
     </section>
   );
 }

@@ -1,0 +1,20 @@
+{
+  "name": "@foto-booth/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shell mobile Capacitor (Android/iOS) untuk kiosk foto-booth (Fase 12, FEATURE-MATRIX #89)",
+  "type": "module",
+  "scripts": {
+    "config:write": "node scripts/write-config.mjs",
+    "config:check": "node scripts/write-config.mjs --check",
+    "sync": "pnpm config:write && pnpm --filter @foto-booth/studio build && cap sync",
+    "open:android": "cap open android",
+    "test": "node --test \"src/lib/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3"
+  }
+}

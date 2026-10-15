@@ -1,0 +1,10 @@
+{
+  "appId": "id.soyuz.fotobooth",
+  "appName": "Foto Booth",
+  "webDir": "../studio/dist",
+  "androidScheme": "https",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  }
+}

@@ -103,8 +103,8 @@ Ini daftar definitif "fitur wajib" versi MVP. Kalau semua baris ini ✅, MVP dia
 | 48 | Kiosk | idle timeout auto reset | **MVP** | 4 |
 | 49 | Kiosk | PIN lock | **MVP** | 4 |
 | 50 | Kiosk | tap to start + wake lock | **MVP** | 4 |
-| 51 | Kiosk | toggle tombol gallery/print/share | Post | 9 |
-| 52 | Kiosk | warning keluar | Post | 9 |
+| 51 | Kiosk | toggle tombol gallery/print/share | Post | 12 |
+| 52 | Kiosk | warning keluar | Post | 12 |
 | 53 | **Sharing** | QR code | **MVP** | 5 |
 | 54 | Sharing | online gallery + password | **MVP** | 5 |
 | 55 | Sharing | TTL 30 hari | **MVP** | 5 |

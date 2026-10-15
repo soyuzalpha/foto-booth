@@ -14,6 +14,7 @@ import KioskPanel from "./components/KioskPanel.tsx";
 import LeadsPanel from "./components/LeadsPanel.tsx";
 import LicensePanel from "./components/LicensePanel.tsx";
 import PrintQueuePanel from "./components/PrintQueuePanel.tsx";
+import PrinterPanel from "./components/PrinterPanel.tsx";
 import SharePanel from "./components/SharePanel.tsx";
 import TemplatePanel from "./components/TemplatePanel.tsx";
 import UploadStatusPanel from "./components/UploadStatusPanel.tsx";
@@ -238,6 +239,7 @@ function StudioApp(): React.JSX.Element {
     | "share"
     | "guestbook"
     | "print"
+    | "printer"
     | "license"
   >("capture");
   const kiosk = useKiosk();
@@ -376,11 +378,21 @@ function StudioApp(): React.JSX.Element {
           >
             {t("tabs.license")}
           </button>
+          <button
+            className={`tab${tab === "printer" ? " is-active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === "printer"}
+            data-testid="tab-printer"
+            onClick={() => setTab("printer")}
+          >
+            {t("tabs.printer")}
+          </button>
         </div>
 
         {tab === "capture" ? (
           <>
-            <CapturePanel />
+            <CapturePanel kiosk={kiosk} />
             <details className="status-panel" open>
               <summary>
                 {t("upload.title")}
@@ -407,6 +419,8 @@ function StudioApp(): React.JSX.Element {
           <GuestbookPanel />
         ) : tab === "print" ? (
           <PrintQueuePanel />
+        ) : tab === "printer" ? (
+          <PrinterPanel />
         ) : tab === "license" ? (
           <LicensePanel />
         ) : (

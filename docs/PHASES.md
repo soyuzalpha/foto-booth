@@ -46,7 +46,7 @@ Rujukan: `SYSTEM-DESIGN.md` §10 (daftar fase) · `FEATURE-MATRIX.md` §A (krite
 | 9 | Leads + analytics + branding | M | `[x]` **selesai** — branding/sharing/auto-print/guestbook + consent UU PDP; tombol kiosk #51/#52 dipindah ke Fase 12 |
 | 10 | Lisensi + order (mekanisme; QRIS ditunda) | M | `[x]` **selesai** — katalog SKU, order, status, kode aktivasi, batas plan; gateway pembayaran sengaja belum |
 | 11 | Booking & reservasi (mekanisme; QRIS ditunda) | L | `[x]` **selesai** — alur booking→event, anti double-booking, invoice/kwitansi, **email SMTP sungguhan**, job pengingat H-1; gateway QRIS sengaja belum |
-| 12 | Desktop (Electron) + mobile (Capacitor) | L | `[ ]` |
+| 12 | Desktop (Electron) + mobile (Capacitor) | L | `[x]` **selesai** — printer bernama + deteksi USB + laporan diagnostik, shell Electron (renderer tanpa Node), proyek Capacitor (skema HTTPS + izin kamera); titipan #51/#52 dari Fase 9 ikut ditutup di sini |
 | 13 | DSLR WebUSB/PTP + marketplace + multi-device | L | `[ ]` |
 
 **Urutan kritis MVP:** `0 → 1 → 2 → 3 → 4 → 5`. Offline **bukan fase terpisah** — dibangun dari Fase 0 dan divalidasi ulang di tiap fase.
@@ -989,6 +989,71 @@ node e2e/phase11-smtp.e2e.mjs
 
 ---
 
+## Fase 12 — Desktop (Electron) + mobile (Capacitor) + titipan kiosk #51/#52
+
+**Status:** `[x]` **selesai (2026-10-15)** — matriks #45/#80/#81/#88/#89 **plus** titipan #51/#52 dari Fase 9 (tombol tamu di layar hasil kiosk + peringatan keluar).
+**Gate masuk:** ✅ Fase 11 gate keluar terpenuhi (dengan gateway QRIS ditunda atas permintaan pemilik, seperti Fase 10).
+**Tujuan:** booth bisa dipasang sebagai aplikasi (bukan tab browser), printer bisa dipilih & didiagnosis tanpa menebak, dan tamu punya layar hasil yang jelas di kiosk.
+
+**Kenapa sekarang:** Fase 9 menitipkan #51/#52 ke sini karena keduanya hidup di layar kiosk, dan layar itu baru masuk akal setelah tahu **perangkat apa** yang menjalankannya (web, Electron, atau Capacitor). Sekaligus: operator tidak boleh disuruh menebak kenapa cetakan tidak keluar — deteksi printer + laporan diagnostik adalah bagian dari "instalasi yang bisa diselesaikan sendiri".
+
+**Batas cakupan yang jujur** (ditulis apa adanya, bukan disembunyikan):
+
+- **Electron benar-benar dijalankan**, bukan cuma dipasang: probe headless lewat `xvfb-run` membuktikan window terbuka dan `fotoBoothDesktop` tersedia (`PROBE_RESULT {"ok":true,…}`).
+- **Capacitor tidak bisa di-package di mesin ini** — tidak ada Java/Android SDK. Yang dibuktikan: proyek Android ter-`cap add` dengan `androidScheme: https` + izin `CAMERA`, konfigurasi **digenerate** dari modul murni, dan rantai CLI `cap sync` sungguhan lewat e2e. APK/IPA belum ada, dan itu tidak diklaim ada.
+- **iOS definitif tidak bisa** dari Linux; hanya konfigurasi yang disiapkan.
+
+**Deliverable**
+
+| Area | File |
+|---|---|
+| Shared — keputusan murni | `packages/shared/src/printer.ts` (kemampuan printer, `choosePrinter`, `mergePrinters`, ringkasan) · `diagnostics.ts` (laporan diagnostik siap kirim) |
+| Studio — runtime | `apps/studio/src/lib/print/printerRuntime.ts` (deteksi lintas transport: Electron / WebUSB / browser) · `usePrinters.ts` (preferensi operator, printer hilang) · `desktopPrinter.ts` (jalur Electron antrean) |
+| Studio — panel | `apps/studio/src/components/PrinterPanel.tsx` (#45/#80/#81) · `PrintQueuePanel.tsx` (printer terpilih) · `diagnostics/runtimeCapabilities.ts` |
+| Studio — kiosk (#51/#52) | `lib/kiosk/resultActions.ts` (tombol mana yang tampil + kapan keluar perlu peringatan) · `lib/kiosk/resultPrint.ts` (cetak langsung, bukan lewat antrean operator) · `lib/kiosk/useKioskResultPrint.ts` (susun gambar hasil → printer) · `components/KioskResultScreen.tsx` · `useKiosk.ts` (sesi berjalan, foto tersimpan, `disarm`) |
+| Desktop | `apps/desktop/src/main.cjs` · `src/preload.cjs` (renderer tanpa akses Node) · `src/lib/config.cjs` (keputusan kiosk, murni & teruji) |
+| Mobile | `apps/mobile/src/lib/mobileConfig.mjs` · `scripts/write-config.mjs` (generator `capacitor.config.json`) · `android/` (scaffold) |
+| **E2E** | `e2e/phase12-desktop.e2e.mjs` · `e2e/phase12-mobile.e2e.mjs` · `e2e/phase12-kiosk.e2e.mjs` (**13 langkah**, Chromium sungguhan atas bundel produksi) |
+| Tes | `packages/shared/src/{printer,diagnostics}.test.ts` · `apps/studio/src/lib/print/{printerRuntime,desktopPrinter}.test.ts` · `apps/studio/src/lib/kiosk/{resultActions,resultPrint}.test.ts` · `apps/desktop/src/lib/config.test.cjs` · `apps/mobile/src/lib/mobileConfig.test.mjs` |
+
+**Task**
+
+- [x] **#45/#80 pilih printer + deteksi USB**: printer dari tiga transport digabung dan di-dedup **berdasarkan nama**; pilihan operator bertahan antar-reload, dan printer yang hilang **diberitahukan**, bukan dihapus diam-diam.
+- [x] **#81 laporan diagnostik**: `diagnostics.ts` menyusun laporan dari kemampuan runtime (`runtimeCapabilities.ts`) — bisa dibaca operator, siap dikirim lewat email.
+- [x] **#88 desktop Electron**: `main.cjs` + `preload.cjs`; **renderer tidak punya akses Node** — preload hanya mengekspos `fotoBoothDesktop` + `getPrinters`. Electron dipindah dari root ke `apps/desktop` supaya binary 283 MB tidak ikut build Docker/CI.
+- [x] **#89 mobile Capacitor**: proyek Android ter-scaffold; `androidScheme: https` **wajib** (tanpa itu kamera kiosk mati di WebView) dan izin `CAMERA` ditambahkan eksplisit karena manifest bawaan tidak memuatnya.
+- [x] **#51 tombol tamu di layar hasil kiosk** (titipan Fase 9): layar hasil tamu muncul setelah sesi diterima, tombolnya **persis** yang dinyalakan operator, dan "Selesai" **selalu ada** — layar hasil tanpa jalan keluar akan mengunci kiosk.
+- [x] **#51 cetak dari layar kiosk**: jalur cetak tersendiri (`resultPrint.ts`), **bukan** antrean operator — antrean itu punya daftar tugas & tombol ulangi yang tidak boleh disentuh tamu. Gambar hasil disusun dari template terbaru; tanpa template, foto pertama sesi dicetak apa adanya.
+- [x] **#52 peringatan keluar**: `requestExit` dipecah — peringatan dulu, lalu PIN, lalu keluar. Peringatan hanya muncul saat memang ada pekerjaan (sesi berjalan / foto sudah tersimpan) dan menyebut sebabnya.
+- [x] **Bug nyata yang ditemukan e2e kiosk:** `markProcessed()` **tidak pernah dipanggil** di aplikasi, jadi state machine berhenti di `processing` selamanya — setelan terkunci, dan layar hasil tidak pernah muncul. Diperbaiki di `CapturePanel.onAccept` (dipanggil di `finally`).
+
+**Validasi**
+
+```bash
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+node docs/check.mjs
+node docs/phases-status.mjs
+corepack pnpm --filter @foto-booth/studio build   # prasyarat e2e kiosk
+node e2e/phase12-desktop.e2e.mjs
+node e2e/phase12-mobile.e2e.mjs
+node e2e/phase12-kiosk.e2e.mjs
+```
+
+**Bukti** (2026-10-15)
+
+- `pnpm lint` → 0 · `pnpm -r typecheck` → 0 (shared · api · studio) · `pnpm -r build` → 0
+- Tes: shared **260** · api **206** · studio **991** · desktop **15** · mobile **9** — 1481 tes, 0 gagal
+- `node e2e/phase12-desktop.e2e.mjs` → lulus (shell Electron + jembatan printer) · `node e2e/phase12-mobile.e2e.mjs` → lulus (rantai `cap sync`) · `node e2e/phase12-kiosk.e2e.mjs` → **13/13 langkah lulus** atas bundel produksi di Chromium sungguhan: layar tarik → sesi → **layar hasil muncul** → tombol persis setelan operator → **cetak benar-benar jalan** (dokumen cetak memuat gambar hasil sebagai data URL) → tombol galeri membuka URL galeri → "Selesai" kembali ke layar tarik → **peringatan keluar** muncul saat sesi hidup, bisa dibatalkan, dan benar-benar keluar saat dikonfirmasi.
+- Electron terbukti jalan headless: `PROBE_RESULT {"ok":true,"text":"halo","electron":"44.7.2","chrome":"152.0.7977.149","node":"24.21.0","platform":"linux"}`
+- `node docs/check.mjs` → `{"issues": [], "outOfCanvas": [], …}`
+
+**Gate keluar Fase 12 → Fase 13:** ✅ terpenuhi untuk seluruh task fase ini. Satu batas cakupan ditulis terbuka di atas dan **tidak** diklaim selesai: **packaging APK/IPA Capacitor** tidak bisa dibuktikan di mesin ini (tidak ada Java/Android SDK; iOS tidak mungkin dari Linux). Yang ada dan terbukti adalah proyek, konfigurasi (digenerate + teruji), izin, dan rantai CLI `cap sync`.
+
+---
+
 ## Checklist QA MVP (dari `FEATURE-MATRIX.md` §D)
 
 Dijalankan penuh di **gate keluar Fase 5** sebelum MVP dianggap selesai.
@@ -1031,7 +1096,7 @@ Detail fitur per baris ada di `FEATURE-MATRIX.md` §B (kolom **Fase**). Isi task
 - **Fase 9** — Leads + consent UU PDP + export CSV · analytics per event · branding/white-label · auto-print + queue
 - **Fase 10** — Lisensi + order: katalog SKU, siklus hidup order, kode aktivasi, batas plan (**mekanisme selesai**; gateway QRIS + webhook ditunda atas permintaan pemilik)
 - **Fase 11** — Booking & reservasi: halaman booking publik · kalender ketersediaan · approve/tolak · reschedule & cancel · dashboard operator · laporan okupansi · invoice/kwitansi · **email SMTP sungguhan** · job pengingat H-1 (**mekanisme selesai**; deposit QRIS ditunda atas permintaan pemilik)
-- **Fase 12** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer
+- **Fase 12** — Desktop (Electron) + mobile (Capacitor) · pilih printer + deteksi USB printer + laporan diagnostik · **titipan #51/#52** (layar hasil tamu + peringatan keluar kiosk) — **detail lengkap di atas**; packaging APK/IPA tidak bisa dibuktikan di mesin ini (tanpa Java/Android SDK)
 - **Fase 13** — DSLR WebUSB/PTP + PTP/IP · phone-as-camera (WebRTC) · marketplace template · sinkron multi-device · remote monitoring
 
 ---

@@ -13,6 +13,14 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/storage/**",
       "apps/api/static/**",
+      // Projekt native Capacitor: isinya template Gradle + **salinan build
+      // studio** (`android/app/src/main/assets/public`). Menyalin hasil build
+      // studio ke dalam `android/` membuat ribuan error lint dari kode yang
+      // tidak pernah disunting di sini — dan yang lebih buruk, menutupi error
+      // nyata di berkas sumber. Folder native tetap di-commit (tanpa itu
+      // `cap sync` harus digenerate ulang tiap build), tapi tidak di-lint.
+      "apps/mobile/android/**",
+      "apps/mobile/ios/**",
       "**/*.d.ts",
     ],
   },
@@ -31,9 +39,25 @@ export default tseslint.config(
       "*.mjs",
       "docs/**/*.mjs",
       "e2e/**/*.mjs",
+      // Keputusan konfigurasi shell mobile (murni, diuji `node --test`).
+      "apps/mobile/**/*.mjs",
     ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
+  // CommonJS Node: shell desktop Electron (`main.cjs`/`preload.cjs`) dan probe
+  // e2e. File-file ini memang `require()` — itu bentuk modul Electron, bukan
+  // kesalahan. Global `process`/`console` juga sengaja dipakai.
+  {
+    files: ["apps/desktop/**/*.cjs", "e2e/**/*.cjs"],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 

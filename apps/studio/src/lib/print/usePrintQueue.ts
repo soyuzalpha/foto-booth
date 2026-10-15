@@ -26,6 +26,14 @@ import { createPrintQueueRunner, type PrintFn, type PrintQueueRunner } from "./p
 export interface UsePrintQueueOptions {
   /** Pencetak pengganti; default: cetak ke printer browser. */
   print?: PrintFn;
+  /**
+   * Pabrik pencetak yang butuh resolver gambar antrean (Fase 12).
+   *
+   * Dipakai `desktopPrinter`: ia harus bisa mengambil gambar dari registry yang
+   * hidup **di dalam** hook ini, jadi tidak bisa dibuat pemanggil. Prop `print`
+   * tetap menang kalau diberikan (tes & panel debug).
+   */
+  makePrint?: (resolve: (jobId: string) => string | null) => PrintFn;
   /** Penyimpanan; default `localStorage`. `null` = memori saja. */
   store?: KeyValueStore | null;
   now?: () => Date;
@@ -62,7 +70,7 @@ function defaultStore(): KeyValueStore | null {
 }
 
 /** Pencetak browser: cetak gambar yang ditempelkan ke tugas lewat `printImage`. */
-function browserPrinter(resolve: (jobId: string) => string | null): PrintFn {
+export function browserPrinter(resolve: (jobId: string) => string | null): PrintFn {
   return async (job) => {
     const imageUrl = resolve(job.id);
     if (imageUrl === null) {
@@ -102,9 +110,11 @@ export function usePrintQueue(options: UsePrintQueueOptions = {}): PrintQueueSta
 
   const runner = useMemo<PrintQueueRunner>(() => {
     const store = options.store === undefined ? defaultStore() : options.store;
+    const resolveImage = (jobId: string): string | null => imagesRef.current.get(jobId) ?? null;
     const print =
       options.print ??
-      browserPrinter((jobId) => imagesRef.current.get(jobId) ?? null);
+      options.makePrint?.(resolveImage) ??
+      browserPrinter(resolveImage);
     return createPrintQueueRunner({ print, store, now: options.now });
     // Runner sengaja dibuat sekali; menggantinya berarti membuang antrean.
     // eslint-disable-next-line react-hooks/exhaustive-deps

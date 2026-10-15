@@ -180,6 +180,7 @@
     "share": "Share",
     "guestbook": "Guestbook",
     "print": "Print queue",
+    "printer": "Printer & diagnostics",
     "license": "License"
   },
   "template": {
@@ -280,7 +281,25 @@
     "attractBody": "Touch the screen to start. Follow the countdown, then strike a pose.",
     "attractCta": "Start",
     "warningBody": "Still there? The screen goes back to the start in {{seconds}} seconds.",
-    "warningKeep": "I'm still here"
+    "warningKeep": "I'm still here",
+    "exitWarningTitle": "Leave kiosk mode?",
+    "exitWarningSession": "A photo session is still running, or photos have not finished saving. Leaving now throws that work away.",
+    "exitWarningIdle": "Kiosk mode will turn off: fullscreen is released and the screen is no longer kept awake.",
+    "exitWarningCancel": "Stay in kiosk",
+    "exitWarningConfirm": "Leave",
+    "resultTitle": "All done!",
+    "resultBody": "Your photos are saved. Pick one of the buttons below.",
+    "resultNoActions": "The operator has not enabled any guest buttons. Press Done to finish the session.",
+    "resultPrint": "Print photo",
+    "resultPrinting": "Printing…",
+    "resultPrinted": "Printing — collect it from the printer.",
+    "resultPrintFailed": "Print failed: {{message}}",
+    "resultGallery": "Open gallery",
+    "resultShare": "Send to phone",
+    "resultDone": "Done",
+    "resultNoGallery": "No active gallery yet — ask the operator.",
+    "resultQrAlt": "Gallery QR code",
+    "resultQrHint": "Scan with your phone camera to open the gallery."
   },
   "gallery": {
     "title": "Guest gallery",
@@ -602,7 +621,11 @@
     "runNext": "Print next",
     "clear": "Clear finished",
     "empty": "The queue is empty. Auto-print, when on, fills it on its own as sessions finish.",
-    "sheets": "sheets out",
+    "sheets": "Sheets printed",
+    "routeDesktop": "Print route: desktop — {{name}} ({{silent}})",
+    "routeBrowser": "Print route: browser dialog",
+    "silentOn": "no dialog",
+    "silentOff": "with dialog",
     "copies": "{{count}} copies",
     "attempts": "{{count}} attempts",
     "reprintOf": "reprint of #{{seq}}",
@@ -676,5 +699,30 @@
       "noCode": "—",
       "settled": "Settled"
     }
+  },
+  "printer": {
+    "title": "Printer & diagnostics",
+    "subtitle": "Pick the printer auto-print uses, and see what is detected. This choice survives a page reload.",
+    "chosen": "Printer in use",
+    "loading": "Detecting…",
+    "none": "No printer detected yet — check the cable and driver.",
+    "chosenMissing": "The printer you picked before is not detected now. Pick again below, or plug the device back in.",
+    "select": "Printer",
+    "systemDefault": "Follow system default",
+    "defaultTag": "default",
+    "silent": "Print without dialog (kiosk)",
+    "silentOnlyDesktop": "Printing without a dialog is only available in the desktop app.",
+    "refresh": "Detect again",
+    "transport": "Path"
+  },
+  "diagnostics": {
+    "title": "Device diagnostics",
+    "readiness": "Readiness",
+    "allPresent": "Every required capability is available.",
+    "missing": "Missing: {{name}}",
+    "build": "Build report",
+    "copy": "Copy report",
+    "copied": "Copied",
+    "save": "Save file"
   }
 }

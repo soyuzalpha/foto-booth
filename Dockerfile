@@ -14,6 +14,15 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/studio/package.json apps/studio/
 COPY packages/shared/package.json packages/shared/
+COPY apps/desktop/package.json apps/desktop/
+COPY apps/mobile/package.json apps/mobile/
+
+# Shell desktop **dan** shell mobile tidak ikut di-deploy (server tidak punya
+# layar), tapi keduanya ada di workspace — jadi package.json-nya harus ikut
+# supaya lockfile cocok (`--frozen-lockfile` menolak workspace yang hilang).
+# Binary Electron (283 MB) TIDAK diunduh: tanpa ini setiap build image
+# menambah ~300 MB yang tidak pernah dipakai.
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 
 RUN pnpm install --frozen-lockfile
 

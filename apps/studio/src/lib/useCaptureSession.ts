@@ -63,6 +63,8 @@ export interface CaptureActions {
   retake(index: number): void;
   retry(): void;
   accept(): void;
+  /** Pemrosesan hasil sesi selesai (dipanggil panel setelah simpan). */
+  markProcessed(): void;
   reset(): void;
   newSession(): void;
   setAspect(id: AspectRatioId): void;
@@ -350,6 +352,15 @@ export function useCaptureSession(): CaptureSnapshot & CaptureActions {
     retake: (index: number) => session?.retake(index),
     retry: () => session?.retry(),
     accept: () => session?.accept(),
+    /**
+     * Tandai pemrosesan hasil sesi selesai.
+     *
+     * Tanpa ini state machine berhenti di `processing` selamanya: setelan
+     * terkunci, dan layar hasil kiosk (yang menunggu `composed`) tidak pernah
+     * muncul. Dipanggil panel capture setelah simpan selesai — berhasil maupun
+     * gagal, karena pekerjaan sesinya sudah selesai di dua kasus itu.
+     */
+    markProcessed: () => session?.markProcessed(),
     reset: () => session?.reset(),
     newSession: () => session?.newSession(),
     setAspect: (id: AspectRatioId) => session?.setAspect(id),

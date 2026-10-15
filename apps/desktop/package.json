@@ -1,0 +1,38 @@
+{
+  "name": "@foto-booth/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shell desktop Electron untuk kiosk foto-booth (Fase 12, #88)",
+  "main": "src/main.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "start:kiosk": "electron . --kiosk",
+    "test": "node --test \"src/lib/*.test.cjs\"",
+    "pack:dir": "electron-builder --dir",
+    "pack": "electron-builder"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "electron": "44.7.2"
+  },
+  "build": {
+    "appId": "id.soyuz.fotobooth",
+    "productName": "Foto Booth",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
